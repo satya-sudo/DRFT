@@ -1,0 +1,444 @@
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import AppShell from "../components/AppShell";
+import MediaGrid from "../components/MediaGrid";
+import MediaViewer from "../components/MediaViewer";
+import { Icon } from "../components/Icons";
+import { useApp } from "../context/AppContext";
+import * as filesAPI from "../lib/api/files";
+
+function formatDateLabel(value) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric"
+  }).format(new Date(value));
+}
+
+function createLocalMediaItems(fileList) {
+  return Array.from(fileList).map((file) => ({
+    id: `local-${file.name}-${file.lastModified}`,
+    fileName: file.name.replace(/\.[^.]+$/, ""),
+    mediaType: file.type.startsWith("video") ? "video" : "image",
+    mimeType: file.type,
+    sizeBytes: file.size,
+    takenAt: new Date().toISOString(),
+    previewUrl: URL.createObjectURL(file),
+    localOnly: true
+  }));
+}
+
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value < 0) {
+    return "Unknown";
+  }
+
+  if (value === 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(
+    Math.floor(Math.log(value) / Math.log(1024)),
+    units.length - 1
+  );
+  const amount = value / 1024 ** exponent;
+  const digits = amount >= 100 || exponent === 0 ? 0 : amount >= 10 ? 1 : 2;
+
+  return `${amount.toFixed(digits)} ${units[exponent]}`;
+}
+
+export default function PhotosPage() {
+  const { token } = useApp();
+  const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+  const [searchParams] = useSearchParams();
+  const [items, setItems] = useState([]);
+  const [storageStats, setStorageStats] = useState(null);
+  const [localItems, setLocalItems] = useState([]);
+  const [uploads, setUploads] = useState([]);
+  const [dropActive, setDropActive] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [filter, setFilter] = useState(searchParams.get("filter") || "all");
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [viewerPanel, setViewerPanel] = useState("none");
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadFiles();
+  }, [token]);
+
+  useEffect(() => {
+    const nextFilter = searchParams.get("filter") || "all";
+    setFilter(nextFilter);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!folderInputRef.current) {
+      return;
+    }
+
+    folderInputRef.current.setAttribute("webkitdirectory", "");
+    folderInputRef.current.setAttribute("directory", "");
+  }, []);
+
+  async function loadFiles() {
+    try {
+      setLoading(true);
+      setError("");
+      const [filesResponse, statsResponse] = await Promise.all([
+        filesAPI.listFiles(token),
+        filesAPI.getStorageStats(token)
+      ]);
+      setItems(filesResponse.items);
+      setStorageStats(statsResponse);
+    } catch (loadError) {
+      setError(loadError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function processSelectedFiles(selectedFiles) {
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    const previewItems = createLocalMediaItems(selectedFiles);
+    setLocalItems((currentValue) => [...previewItems, ...currentValue]);
+    setUploads(
+      selectedFiles.map((file) => ({
+        id: `upload-${file.name}-${file.lastModified}`,
+        name: file.name,
+        sizeBytes: file.size,
+        progress: 0,
+        status: "uploading"
+      }))
+    );
+
+    for (const selectedFile of selectedFiles) {
+      const uploadID = `upload-${selectedFile.name}-${selectedFile.lastModified}`;
+
+      try {
+        await filesAPI.uploadFileWithProgress(token, selectedFile, (progress) => {
+          setUploads((currentValue) =>
+            currentValue.map((entry) =>
+              entry.id === uploadID ? { ...entry, progress } : entry
+            )
+          );
+        });
+
+        setUploads((currentValue) =>
+          currentValue.map((entry) =>
+            entry.id === uploadID
+              ? { ...entry, progress: 100, status: "done" }
+              : entry
+          )
+        );
+      } catch (uploadError) {
+        setError(uploadError.message);
+        setUploads((currentValue) =>
+          currentValue.map((entry) =>
+            entry.id === uploadID
+              ? { ...entry, status: "error", error: uploadError.message }
+              : entry
+          )
+        );
+      }
+    }
+
+    setLocalItems([]);
+    setTimeout(() => {
+      setUploads([]);
+    }, 900);
+    await loadFiles();
+  }
+
+  async function handleLocalUpload(event) {
+    const selectedFiles = Array.from(event.target.files || []);
+    await processSelectedFiles(selectedFiles);
+    event.target.value = "";
+  }
+
+  async function handleDrop(event) {
+    event.preventDefault();
+    setDropActive(false);
+
+    const droppedFiles = Array.from(event.dataTransfer.files || []);
+    await processSelectedFiles(droppedFiles);
+  }
+
+  async function handleDeleteFile(item) {
+    setConfirmDeleteItem(item);
+  }
+
+  async function confirmDelete() {
+    const item = confirmDeleteItem;
+    if (!item) {
+      return;
+    }
+
+    if (item.localOnly) {
+      setSelectedItem(null);
+      setLocalItems((currentValue) => currentValue.filter((entry) => entry.id !== item.id));
+      setConfirmDeleteItem(null);
+      return;
+    }
+
+    try {
+      await filesAPI.deleteFile(token, item.id);
+      setSelectedItem(null);
+      setItems((currentValue) => currentValue.filter((entry) => entry.id !== item.id));
+      setConfirmDeleteItem(null);
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }
+
+  const combinedItems = [...localItems, ...items].filter((item) => {
+    const matchesFilter = filter === "all" ? true : item.mediaType === filter;
+    const matchesSearch = item.fileName
+      .toLowerCase()
+      .includes(searchValue.trim().toLowerCase());
+
+    return matchesFilter && matchesSearch;
+  });
+
+  const groupedItems = combinedItems.reduce((groups, item) => {
+    const key = item.takenAt.slice(0, 10);
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+
+    groups[key].push(item);
+    return groups;
+  }, {});
+
+  const orderedGroups = Object.entries(groupedItems).sort((left, right) =>
+    right[0].localeCompare(left[0])
+  );
+
+  const imageCount = combinedItems.filter((item) => item.mediaType === "image").length;
+  const videoCount = combinedItems.filter((item) => item.mediaType === "video").length;
+  const totalUploadBytes = uploads.reduce(
+    (sum, upload) => sum + (upload.sizeBytes || 0),
+    0
+  );
+  const activeUploadCount = uploads.filter((upload) => upload.status === "uploading").length;
+
+  return (
+    <AppShell
+      title="Photo timeline"
+      description="A calm, date-led view of your photos and videos with room for uploads, viewer details, and future device sync."
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      sidebarContent={
+        <div className="sidebar-stats">
+          <div className="sidebar-stats-header">
+            <span className="eyebrow">Library</span>
+            <strong>{combinedItems.length} items</strong>
+          </div>
+          <div className="sidebar-stats-grid">
+            <div className="sidebar-stat">
+              <strong>{imageCount}</strong>
+              <span>Images</span>
+            </div>
+            <div className="sidebar-stat">
+              <strong>{videoCount}</strong>
+              <span>Videos</span>
+            </div>
+            <div className="sidebar-stat">
+              <strong>{formatBytes(storageStats?.drftUsedBytes ?? 0)}</strong>
+              <span>DRFT used</span>
+            </div>
+            <div className="sidebar-stat">
+              <strong>{formatBytes(storageStats?.availableBytes ?? 0)}</strong>
+              <span>Space left</span>
+            </div>
+            <div className="sidebar-stat sidebar-stat-full">
+              <strong>{formatBytes(storageStats?.totalBytes ?? 0)}</strong>
+              <span>Disk total</span>
+            </div>
+          </div>
+        </div>
+      }
+      actions={
+        <div className="upload-actions">
+          <div className="upload-queue-menu">
+            <button
+              type="button"
+              className={queueOpen ? "ghost-button upload-queue-toggle upload-queue-toggle-active" : "ghost-button upload-queue-toggle"}
+              onClick={() => setQueueOpen((currentValue) => !currentValue)}
+            >
+              <span>Queue</span>
+              <span className="upload-queue-count">{uploads.length}</span>
+            </button>
+
+            {queueOpen ? (
+              <div className="surface upload-queue-popover">
+                <div className="panel-header">
+                  <div>
+                    <span className="eyebrow">Uploads</span>
+                    <h2>Transfer queue</h2>
+                  </div>
+                  <span className="panel-count">
+                    {activeUploadCount} active • {formatBytes(totalUploadBytes)}
+                  </span>
+                </div>
+                {uploads.length > 0 ? (
+                  <div className="upload-list">
+                    {uploads.map((upload) => (
+                      <div key={upload.id} className="upload-row">
+                        <div>
+                          <strong>{upload.name}</strong>
+                          <span>
+                            {upload.status === "error"
+                              ? upload.error
+                              : upload.status === "done"
+                                ? "Done"
+                                : `${upload.progress}%`}
+                          </span>
+                        </div>
+                        <div className="upload-progress">
+                          <div style={{ width: `${upload.progress}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="upload-queue-empty">
+                    <p>No uploads in progress right now.</p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <label className="primary-button upload-button">
+            <Icon name="upload" />
+            <span>Add files</span>
+            <input ref={fileInputRef} type="file" multiple hidden onChange={handleLocalUpload} />
+          </label>
+          <label className="ghost-button upload-button">
+            <span>Add folder</span>
+            <input ref={folderInputRef} type="file" multiple hidden onChange={handleLocalUpload} />
+          </label>
+        </div>
+      }
+    >
+      <div
+        className={dropActive ? "surface bulk-dropzone bulk-dropzone-active" : "surface bulk-dropzone"}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDropActive(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDropActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          if (event.currentTarget === event.target) {
+            setDropActive(false);
+          }
+        }}
+        onDrop={handleDrop}
+      >
+        <div className="bulk-dropzone-copy">
+          <span className="eyebrow">Bulk upload</span>
+          <h2>Drop a batch of photos or videos here</h2>
+          <p>Drag files, drop a whole folder, or use the upload buttons to import a large set into DRFT.</p>
+        </div>
+        <div className="bulk-dropzone-actions">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Choose files
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => folderInputRef.current?.click()}
+          >
+            Choose folder
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="surface empty-state">
+          <h2>Loading your library</h2>
+          <p>Fetching the current timeline from DRFT.</p>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="surface empty-state">
+          <h2>Could not load files</h2>
+          <p>{error}</p>
+        </div>
+      ) : null}
+
+      {!loading && !error
+        ? orderedGroups.map(([dateKey, group]) => (
+            <section key={dateKey} className="timeline-group">
+              <div className="timeline-header">
+                <h2>{formatDateLabel(dateKey)}</h2>
+                <span>{group.length} items</span>
+              </div>
+              <MediaGrid items={group} onSelect={setSelectedItem} />
+            </section>
+          ))
+        : null}
+
+      {!loading && !error && orderedGroups.length === 0 ? (
+        <div className="surface empty-state">
+          <h2>No media yet</h2>
+          <p>Upload your first batch to start the timeline.</p>
+        </div>
+      ) : null}
+
+      <MediaViewer
+        item={selectedItem}
+        onClose={() => {
+          setSelectedItem(null);
+          setViewerPanel("none");
+          setConfirmDeleteItem(null);
+        }}
+        onDelete={handleDeleteFile}
+        pendingDelete={confirmDeleteItem ? "confirm" : viewerPanel}
+        onToggleInfo={() =>
+          setViewerPanel((currentValue) =>
+            currentValue === "info" ? "none" : "info"
+          )
+        }
+      />
+
+      {confirmDeleteItem ? (
+        <div className="confirm-backdrop" onClick={() => setConfirmDeleteItem(null)}>
+          <div className="confirm-dialog surface" onClick={(event) => event.stopPropagation()}>
+            <span className="eyebrow">Delete media</span>
+            <h2>Remove this file from DRFT?</h2>
+            <p>
+              This will remove the selected {confirmDeleteItem.mediaType} from both
+              storage and the timeline.
+            </p>
+            <div className="confirm-actions">
+              <button type="button" className="ghost-button" onClick={() => setConfirmDeleteItem(null)}>
+                Cancel
+              </button>
+              <button type="button" className="ghost-button danger-button" onClick={confirmDelete}>
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </AppShell>
+  );
+}
