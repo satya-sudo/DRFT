@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "DRFT",
+    "slug": "drft-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.drft.mobile"
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:8080"
+    },
+    "plugins": [
+      "expo-video"
+    ]
+  }
+}

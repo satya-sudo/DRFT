@@ -82,7 +82,10 @@ func (m *TokenManager) Parse(token string) (Claims, error) {
 }
 
 func (m *TokenManager) UserFromRequest(ctx context.Context, header string, store *Store) (User, error) {
-	token := extractBearerToken(header)
+	return m.UserFromToken(ctx, extractBearerToken(header), store)
+}
+
+func (m *TokenManager) UserFromToken(ctx context.Context, token string, store *Store) (User, error) {
 	if token == "" {
 		return User{}, errors.New("missing bearer token")
 	}

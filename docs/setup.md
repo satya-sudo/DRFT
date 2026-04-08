@@ -2,6 +2,20 @@
 
 ## Local development
 
+### Node.js
+
+DRFT frontend and mobile work should use:
+
+```bash
+node -v
+```
+
+Expected:
+
+```bash
+v20.x
+```
+
 ### Backend
 
 ```bash
@@ -89,4 +103,3 @@ To publish the docs:
 3. Go to `Pages`.
 4. Choose `Deploy from a branch`.
 5. Select the branch and the `/docs` folder.
-

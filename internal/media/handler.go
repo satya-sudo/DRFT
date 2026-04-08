@@ -205,7 +205,7 @@ func (h *Handler) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleFileByID(w http.ResponseWriter, r *http.Request) {
-	user, err := h.auth.Authenticate(r)
+	user, err := h.auth.AuthenticateMedia(r)
 	if err != nil {
 		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return

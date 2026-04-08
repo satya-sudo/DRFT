@@ -14,6 +14,24 @@ func (h *Handler) Authenticate(r *http.Request) (User, error) {
 	return h.tokens.UserFromRequest(r.Context(), r.Header.Get("Authorization"), h.store)
 }
 
+func (h *Handler) AuthenticateMedia(r *http.Request) (User, error) {
+	if user, err := h.Authenticate(r); err == nil {
+		return user, nil
+	}
+
+	token := r.URL.Query().Get("access_token")
+	if token == "" {
+		return User{}, ErrUnauthorized
+	}
+
+	user, err := h.tokens.UserFromToken(r.Context(), token, h.store)
+	if err != nil {
+		return User{}, ErrUnauthorized
+	}
+
+	return user, nil
+}
+
 func (h *Handler) RequireAdmin(r *http.Request) (User, error) {
 	user, err := h.Authenticate(r)
 	if err != nil {

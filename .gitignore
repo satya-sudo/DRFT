@@ -11,5 +11,7 @@ dist-test/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-test/
+mobile/node_modules/
+mobile/.expo/
 bin/
 storage/

@@ -35,6 +35,21 @@ The web client currently includes:
 - device page placeholder
 - role-aware navigation
 
+## Mobile
+
+The mobile client currently includes:
+
+- Expo SDK 54 with Expo Go compatibility
+- first-run server setup and validation
+- saved server endpoint
+- saved login session restore
+- image/video timeline
+- drawer navigation for everything, images, videos, and settings
+- swipeable media viewer
+- local save-to-device support
+- delete with confirmation
+- upload from device gallery
+
 ## Implemented flows
 
 ### Authentication
@@ -56,6 +71,8 @@ The web client currently includes:
 - video preview in grid
 - viewer actions such as info, download, delete
 - delete confirmation
+- mobile local save-to-device
+- mobile swipe between adjacent media items
 
 ### Storage
 
@@ -75,4 +92,3 @@ The web client currently includes:
 - background job system
 - Redis/cache layer
 - mobile sync logic
-

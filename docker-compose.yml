@@ -37,7 +37,17 @@ services:
       - drft_storage:/var/lib/drft/storage
     restart: unless-stopped
 
+  drft-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: drft-web
+    depends_on:
+      - drft-api
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
 volumes:
   drft_postgres_data:
   drft_storage:
-
