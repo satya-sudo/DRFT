@@ -6,6 +6,7 @@ import (
 
 	"drft/internal/auth"
 	"drft/internal/config"
+	"drft/internal/library"
 	"drft/internal/media"
 )
 
@@ -14,6 +15,7 @@ type Dependencies struct {
 	Logger *slog.Logger
 	Auth   *auth.Handler
 	Media  *media.Handler
+	Library *library.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -22,6 +24,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	registerHealthRoutes(mux, deps.Config)
 	deps.Auth.RegisterRoutes(mux)
 	deps.Media.RegisterRoutes(mux)
+	deps.Library.RegisterRoutes(mux)
 
 	return mux
 }

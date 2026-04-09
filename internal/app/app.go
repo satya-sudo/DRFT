@@ -10,6 +10,7 @@ import (
 	"drft/internal/auth"
 	"drft/internal/config"
 	drfthttp "drft/internal/http"
+	"drft/internal/library"
 	"drft/internal/media"
 	"drft/migrations"
 	_ "github.com/lib/pq"
@@ -21,6 +22,7 @@ type App struct {
 	db     *sql.DB
 	auth   *auth.Handler
 	media  *media.Handler
+	library *library.Handler
 }
 
 func New(cfg config.Config, logger *slog.Logger) (*App, error) {
@@ -51,6 +53,7 @@ func New(cfg config.Config, logger *slog.Logger) (*App, error) {
 		db:     db,
 		auth:   authHandler,
 		media:  media.NewHandler(cfg, logger, authHandler, db),
+		library: library.NewHandler(logger, authHandler, db),
 	}, nil
 }
 
@@ -60,6 +63,7 @@ func (a *App) Routes() http.Handler {
 		Logger: a.logger,
 		Auth:   a.auth,
 		Media:  a.media,
+		Library: a.library,
 	})
 
 	return drfthttp.WithRequestLogging(a.logger, router)

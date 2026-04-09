@@ -4,6 +4,8 @@ const NAV_ITEMS = [
   { id: "all", label: "Everything" },
   { id: "image", label: "Images" },
   { id: "video", label: "Videos" },
+  { id: "albums", label: "Albums" },
+  { id: "tags", label: "Tags" },
   { id: "settings", label: "Settings" }
 ];
 
@@ -27,7 +29,34 @@ export default function AppSidebar({
           </View>
 
           <View style={styles.navGroup}>
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.slice(0, 3).map((item) => (
+              <Pressable
+                key={item.id}
+                style={[
+                  styles.navItem,
+                  activeSection === item.id ? styles.navItemActive : null
+                ]}
+                onPress={() => {
+                  onChangeSection(item.id);
+                  onClose();
+                }}
+              >
+                <Text
+                  style={[
+                    styles.navItemText,
+                    activeSection === item.id ? styles.navItemTextActive : null
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.navGroup}>
+            {NAV_ITEMS.slice(3).map((item) => (
               <Pressable
                 key={item.id}
                 style={[
@@ -111,6 +140,11 @@ const styles = StyleSheet.create({
   },
   navGroup: {
     gap: 8
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#2a2c30",
+    marginVertical: 14
   },
   navItem: {
     borderRadius: 18,

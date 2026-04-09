@@ -3,6 +3,8 @@ import SetupAdminPage from "./pages/SetupAdminPage";
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import PhotosPage from "./pages/PhotosPage";
+import AlbumsPage from "./pages/AlbumsPage";
+import TagsPage from "./pages/TagsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import DevicesPage from "./pages/DevicesPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -135,6 +137,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <PhotosPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/albums"
+        element={
+          <ProtectedRoute>
+            <AlbumsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tags"
+        element={
+          <ProtectedRoute>
+            <TagsPage />
           </ProtectedRoute>
         }
       />

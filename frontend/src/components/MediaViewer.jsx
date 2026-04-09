@@ -64,7 +64,7 @@ export default function MediaViewer({
               <Icon name="info" />
               <span>{pendingDelete === "info" ? "Hide info" : "More info"}</span>
             </button>
-            {!item.localOnly ? (
+            {!item.localOnly && typeof onDelete === "function" ? (
               <button type="button" className="ghost-button danger-button" onClick={() => onDelete?.(item)}>
                 Delete
               </button>

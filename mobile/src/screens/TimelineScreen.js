@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useApp } from "../context/AppContext";
-import * as filesApi from "../lib/api/files";
-import AuthenticatedImage from "../components/AuthenticatedImage";
 import AppSidebar from "../components/AppSidebar";
+import AuthenticatedImage from "../components/AuthenticatedImage";
 import MediaViewerModal from "../components/MediaViewerModal";
 import VideoPreviewTile from "../components/VideoPreviewTile";
+import * as filesApi from "../lib/api/files";
+import * as libraryApi from "../lib/api/library";
+
+const TAG_COLORS = ["#8ab4f8", "#81c995", "#f6c36d", "#f28b82", "#c58af9", "#78d9ec"];
 
 function formatDateLabel(value) {
   return new Intl.DateTimeFormat("en-US", {
@@ -58,10 +64,26 @@ function getTileHeight(item, tileWidth) {
   return item.mediaType === "video" ? 160 : 126;
 }
 
+function formatAlbumDate(value) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
 export default function TimelineScreen() {
   const { logout, token, user, apiBaseUrl, clearServerConfig } = useApp();
   const { width } = useWindowDimensions();
   const [items, setItems] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [selectedAlbumID, setSelectedAlbumID] = useState("");
+  const [selectedTagID, setSelectedTagID] = useState("");
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [selectedTag, setSelectedTag] = useState(null);
+  const [albumForm, setAlbumForm] = useState({ name: "", description: "" });
+  const [tagForm, setTagForm] = useState({ name: "", color: TAG_COLORS[0] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -72,24 +94,108 @@ export default function TimelineScreen() {
   const [activeSection, setActiveSection] = useState("all");
 
   useEffect(() => {
-    loadFiles(true);
+    initializeScreen();
   }, [token]);
 
-  async function loadFiles(isInitial = false) {
+  useEffect(() => {
+    if (albums.length && (!selectedAlbumID || !albums.some((album) => album.id === selectedAlbumID))) {
+      setSelectedAlbumID(albums[0].id);
+      return;
+    }
+
+    if (!albums.length) {
+      setSelectedAlbumID("");
+      setSelectedAlbum(null);
+    }
+  }, [albums, selectedAlbumID]);
+
+  useEffect(() => {
+    if (tags.length && (!selectedTagID || !tags.some((tag) => tag.id === selectedTagID))) {
+      setSelectedTagID(tags[0].id);
+      return;
+    }
+
+    if (!tags.length) {
+      setSelectedTagID("");
+      setSelectedTag(null);
+    }
+  }, [selectedTagID, tags]);
+
+  useEffect(() => {
+    if ((activeSection === "albums" || selectedAlbum) && selectedAlbumID) {
+      loadAlbumDetail(selectedAlbumID);
+    }
+  }, [activeSection, selectedAlbumID, token]);
+
+  useEffect(() => {
+    if ((activeSection === "tags" || selectedTag) && selectedTagID) {
+      loadTagDetail(selectedTagID);
+    }
+  }, [activeSection, selectedTagID, token]);
+
+  async function initializeScreen() {
     try {
-      if (isInitial) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
-      }
+      setLoading(true);
       setError("");
-      const response = await filesApi.listFiles(token);
-      setItems(response.items);
+      await Promise.all([loadFiles(true), loadCollections()]);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadFiles(isInitial = false) {
+    try {
+      if (!isInitial) {
+        setRefreshing(true);
+      }
+      setError("");
+      const response = await filesApi.listFiles(token);
+      setItems(response.items || []);
+    } catch (loadError) {
+      setError(loadError.message);
+      throw loadError;
+    } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function loadCollections() {
+    try {
+      const [albumsResponse, tagsResponse] = await Promise.all([
+        libraryApi.listAlbums(token),
+        libraryApi.listTags(token)
+      ]);
+      setAlbums(albumsResponse.albums || []);
+      setTags(tagsResponse.tags || []);
+    } catch (loadError) {
+      setError(loadError.message);
+      throw loadError;
+    }
+  }
+
+  async function loadAlbumDetail(albumID) {
+    try {
+      const response = await libraryApi.getAlbum(token, albumID);
+      setSelectedAlbum({
+        ...response.album,
+        items: response.items || []
+      });
+    } catch (loadError) {
+      setError(loadError.message);
+    }
+  }
+
+  async function loadTagDetail(tagID) {
+    try {
+      const response = await libraryApi.getTag(token, tagID);
+      setSelectedTag({
+        ...response.tag,
+        items: response.items || []
+      });
+    } catch (loadError) {
+      setError(loadError.message);
     }
   }
 
@@ -119,7 +225,13 @@ export default function TimelineScreen() {
         await filesApi.uploadAssetWithProgress(token, asset);
       }
 
-      await loadFiles(true);
+      await Promise.all([loadFiles(true), loadCollections()]);
+      if (selectedAlbumID) {
+        await loadAlbumDetail(selectedAlbumID);
+      }
+      if (selectedTagID) {
+        await loadTagDetail(selectedTagID);
+      }
     } catch (uploadError) {
       setError(uploadError.message);
     } finally {
@@ -133,30 +245,185 @@ export default function TimelineScreen() {
     await clearServerConfig();
   }
 
-  async function handleDeleteItem(itemToDelete, currentIndex) {
+  async function handleDeleteItem(itemToDelete) {
     try {
       await filesApi.deleteFile(token, itemToDelete.id);
-      const nextItems = items.filter((item) => item.id !== itemToDelete.id);
-      setItems(nextItems);
-      if (!nextItems.length) {
-        setSelectedItem(null);
-        return true;
+      setSelectedItem(null);
+      await Promise.all([loadFiles(true), loadCollections()]);
+      if (selectedAlbumID) {
+        await loadAlbumDetail(selectedAlbumID);
       }
-
-      const nextFilteredItems =
-        activeSection === "image"
-          ? nextItems.filter((item) => item.mediaType === "image")
-          : activeSection === "video"
-            ? nextItems.filter((item) => item.mediaType === "video")
-            : nextItems;
-      const nextIndex = Math.min(currentIndex, nextFilteredItems.length - 1);
-      setSelectedItem(nextFilteredItems[nextIndex] || null);
-      return false;
+      if (selectedTagID) {
+        await loadTagDetail(selectedTagID);
+      }
+      return true;
     } catch (deleteError) {
       setError(deleteError.message);
       return false;
     }
   }
+
+  async function handleCreateAlbum() {
+    if (!albumForm.name.trim()) {
+      setError("Album name is required.");
+      return;
+    }
+
+    try {
+      setError("");
+      const response = await libraryApi.createAlbum(token, {
+        name: albumForm.name.trim(),
+        description: albumForm.description.trim()
+      });
+      setAlbumForm({ name: "", description: "" });
+      await loadCollections();
+      setSelectedAlbumID(response.album.id);
+      setActiveSection("albums");
+    } catch (createError) {
+      setError(createError.message);
+    }
+  }
+
+  async function handleCreateTag() {
+    if (!tagForm.name.trim()) {
+      setError("Tag name is required.");
+      return;
+    }
+
+    try {
+      setError("");
+      const response = await libraryApi.createTag(token, {
+        name: tagForm.name.trim(),
+        color: tagForm.color
+      });
+      setTagForm({ name: "", color: tagForm.color });
+      await loadCollections();
+      setSelectedTagID(response.tag.id);
+      setActiveSection("tags");
+    } catch (createError) {
+      setError(createError.message);
+    }
+  }
+
+  async function handleAddToSelectedAlbum(fileID) {
+    if (!selectedAlbumID) {
+      return;
+    }
+
+    try {
+      setError("");
+      await libraryApi.addFilesToAlbum(token, selectedAlbumID, [fileID]);
+      await Promise.all([loadCollections(), loadAlbumDetail(selectedAlbumID)]);
+    } catch (actionError) {
+      setError(actionError.message);
+    }
+  }
+
+  async function handleAddToSelectedTag(fileID) {
+    if (!selectedTagID) {
+      return;
+    }
+
+    try {
+      setError("");
+      await libraryApi.addTagToFile(token, fileID, selectedTagID);
+      await Promise.all([loadCollections(), loadTagDetail(selectedTagID)]);
+    } catch (actionError) {
+      setError(actionError.message);
+    }
+  }
+
+  async function handleRemoveFromSelectedAlbum() {
+    if (!selectedAlbumID || !selectedItem) {
+      return;
+    }
+
+    try {
+      setError("");
+      await libraryApi.removeFileFromAlbum(token, selectedAlbumID, selectedItem.id);
+      setSelectedItem(null);
+      await Promise.all([loadCollections(), loadAlbumDetail(selectedAlbumID)]);
+    } catch (actionError) {
+      setError(actionError.message);
+    }
+  }
+
+  async function handleRemoveFromSelectedTag() {
+    if (!selectedTagID || !selectedItem) {
+      return;
+    }
+
+    try {
+      setError("");
+      await libraryApi.removeTagFromFile(token, selectedItem.id, selectedTagID);
+      setSelectedItem(null);
+      await Promise.all([loadCollections(), loadTagDetail(selectedTagID)]);
+    } catch (actionError) {
+      setError(actionError.message);
+    }
+  }
+
+  function handleDeleteAlbum() {
+    if (!selectedAlbumID) {
+      return;
+    }
+
+    Alert.alert(
+      "Delete album?",
+      "The album will be removed, but the media stays in DRFT.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await libraryApi.deleteAlbum(token, selectedAlbumID);
+              setSelectedAlbum(null);
+              setSelectedAlbumID("");
+              await loadCollections();
+            } catch (deleteError) {
+              setError(deleteError.message);
+            }
+          }
+        }
+      ]
+    );
+  }
+
+  function handleDeleteTag() {
+    if (!selectedTagID) {
+      return;
+    }
+
+    Alert.alert(
+      "Delete tag?",
+      "This removes the tag, but your media stays in DRFT.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await libraryApi.deleteTag(token, selectedTagID);
+              setSelectedTag(null);
+              setSelectedTagID("");
+              await loadCollections();
+            } catch (deleteError) {
+              setError(deleteError.message);
+            }
+          }
+        }
+      ]
+    );
+  }
+
+  const selectedCollectionItems = activeSection === "albums"
+    ? selectedAlbum?.items || []
+    : activeSection === "tags"
+      ? selectedTag?.items || []
+      : [];
 
   const filteredItems = useMemo(() => {
     if (activeSection === "image") {
@@ -167,9 +434,16 @@ export default function TimelineScreen() {
       return items.filter((item) => item.mediaType === "video");
     }
 
-    return items;
-  }, [activeSection, items]);
+    if (activeSection === "albums" || activeSection === "tags") {
+      return selectedCollectionItems;
+    }
 
+    return items;
+  }, [activeSection, items, selectedCollectionItems]);
+
+  const viewerItems = filteredItems;
+  const imageCount = items.filter((item) => item.mediaType === "image").length;
+  const videoCount = items.filter((item) => item.mediaType === "video").length;
   const columnCount = width >= 520 ? 4 : 3;
   const tileGap = 4;
   const tileWidth = Math.floor((width - 16 * 2 - tileGap * (columnCount - 1)) / columnCount);
@@ -181,22 +455,94 @@ export default function TimelineScreen() {
       })),
     [columnCount, filteredItems]
   );
-  const imageCount = items.filter((item) => item.mediaType === "image").length;
-  const videoCount = items.filter((item) => item.mediaType === "video").length;
+  const selectedItemIDs = new Set(selectedCollectionItems.map((item) => item.id));
+  const suggestedFiles = items.filter((item) => !selectedItemIDs.has(item.id)).slice(0, 15);
+
+  function renderGridRow(row) {
+    return (
+      <View style={styles.gridRow}>
+        {row.map((entry) => {
+          const tileHeight = getTileHeight(entry, tileWidth);
+
+          return (
+            <Pressable
+              key={entry.id}
+              style={[styles.card, { width: tileWidth, height: tileHeight }]}
+              onPress={() => setSelectedItem(entry)}
+            >
+              {entry.mediaType === "video" ? (
+                <VideoPreviewTile item={entry} token={token} />
+              ) : (
+                <AuthenticatedImage
+                  downloadPath={entry.downloadUrl}
+                  previewPath={entry.previewUrl}
+                  style={styles.image}
+                  token={token}
+                />
+              )}
+            </Pressable>
+          );
+        })}
+
+        {row.length < columnCount
+          ? Array.from({ length: columnCount - row.length }).map((_, index) => (
+              <View key={`spacer-${index}`} style={{ width: tileWidth, height: 1 }} />
+            ))
+          : null}
+      </View>
+    );
+  }
+
+  function renderMediaCollection(emptyTitle, emptyText) {
+    if (!groupedItems.length) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+          <Text style={styles.emptyText}>{emptyText}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.collectionSections}>
+        {groupedItems.map((section) => (
+          <View key={section.title} style={styles.collectionSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+            {section.data.map((row, index) => (
+              <View key={`${section.title}-${index}`}>{renderGridRow(row)}</View>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }
 
   function renderHeader() {
-    const title =
-      activeSection === "image"
-        ? "Images"
-        : activeSection === "video"
-          ? "Videos"
-          : "Everything";
-    const subtitle =
-      activeSection === "settings"
-        ? "Control your mobile connection and session"
-        : uploading
-          ? uploadLabel || "Uploading into DRFT"
-          : `${filteredItems.length} item${filteredItems.length === 1 ? "" : "s"} in this view`;
+    const titleMap = {
+      all: "Everything",
+      image: "Images",
+      video: "Videos",
+      albums: "Albums",
+      tags: "Tags",
+      settings: "Settings"
+    };
+
+    let subtitle = `${filteredItems.length} item${filteredItems.length === 1 ? "" : "s"} in this view`;
+    if (activeSection === "settings") {
+      subtitle = "Control your mobile connection and session";
+    } else if (activeSection === "albums") {
+      subtitle = selectedAlbum
+        ? `${selectedAlbum.fileCount} item${selectedAlbum.fileCount === 1 ? "" : "s"} in ${selectedAlbum.name}`
+        : "Build intentional collections from your library";
+    } else if (activeSection === "tags") {
+      subtitle = selectedTag
+        ? `${selectedTag.fileCount} file${selectedTag.fileCount === 1 ? "" : "s"} tagged ${selectedTag.name}`
+        : "Use personal labels across albums and dates";
+    } else if (uploading) {
+      subtitle = uploadLabel || "Uploading into DRFT";
+    }
 
     return (
       <View style={styles.topbar}>
@@ -206,7 +552,7 @@ export default function TimelineScreen() {
 
         <View style={styles.topbarCopy}>
           <Text style={styles.eyebrow}>DRFT MOBILE</Text>
-          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.title}>{titleMap[activeSection]}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
 
@@ -233,6 +579,8 @@ export default function TimelineScreen() {
           <Text style={styles.settingsText}>{items.length} total files</Text>
           <Text style={styles.settingsText}>{imageCount} images</Text>
           <Text style={styles.settingsText}>{videoCount} videos</Text>
+          <Text style={styles.settingsText}>{albums.length} albums</Text>
+          <Text style={styles.settingsText}>{tags.length} tags</Text>
         </View>
 
         <View style={styles.settingsCard}>
@@ -248,6 +596,214 @@ export default function TimelineScreen() {
           </View>
         </View>
       </View>
+    );
+  }
+
+  function renderAlbums() {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.collectionFormCard}>
+          <Text style={styles.settingsEyebrow}>Create album</Text>
+          <Text style={styles.collectionFormTitle}>Keep moments together</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Album name"
+            placeholderTextColor="#7f858c"
+            value={albumForm.name}
+            onChangeText={(value) => setAlbumForm((currentValue) => ({ ...currentValue, name: value }))}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Description"
+            placeholderTextColor="#7f858c"
+            value={albumForm.description}
+            onChangeText={(value) =>
+              setAlbumForm((currentValue) => ({
+                ...currentValue,
+                description: value
+              }))
+            }
+          />
+          <Pressable style={styles.secondaryButton} onPress={handleCreateAlbum}>
+            <Text style={styles.secondaryButtonText}>Create album</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionRail}>
+          {albums.map((album) => (
+            <Pressable
+              key={album.id}
+              style={[
+                styles.collectionCard,
+                selectedAlbumID === album.id ? styles.collectionCardActive : null
+              ]}
+              onPress={() => setSelectedAlbumID(album.id)}
+            >
+              <Text style={styles.collectionCardTitle}>{album.name}</Text>
+              <Text style={styles.collectionCardMeta}>{album.fileCount} items</Text>
+              <Text style={styles.collectionCardMeta}>{formatAlbumDate(album.updatedAt)}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {selectedAlbum ? (
+          <View style={styles.collectionDetailCard}>
+            <View style={styles.collectionDetailHeader}>
+              <View style={styles.collectionDetailCopy}>
+                <Text style={styles.settingsEyebrow}>Album detail</Text>
+                <Text style={styles.collectionDetailTitle}>{selectedAlbum.name}</Text>
+                <Text style={styles.collectionDetailText}>
+                  {selectedAlbum.description || "A focused collection inside DRFT."}
+                </Text>
+              </View>
+              <View style={styles.collectionActionRow}>
+                {selectedItem ? (
+                  <Pressable style={styles.secondaryButton} onPress={handleRemoveFromSelectedAlbum}>
+                    <Text style={styles.secondaryButtonText}>Remove selected</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable style={styles.warnButton} onPress={handleDeleteAlbum}>
+                  <Text style={styles.warnButtonText}>Delete album</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {suggestedFiles.length ? (
+              <View style={styles.addStrip}>
+                <Text style={styles.addStripTitle}>Add from library</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+                  {suggestedFiles.map((file) => (
+                    <Pressable
+                      key={file.id}
+                      style={styles.pill}
+                      onPress={() => handleAddToSelectedAlbum(file.id)}
+                    >
+                      <Text style={styles.pillText}>{file.fileName}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {renderMediaCollection(
+              "This album is empty",
+              "Add a few files from your library to start shaping it."
+            )}
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No album selected</Text>
+            <Text style={styles.emptyText}>Choose an album above or create a new one.</Text>
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
+  function renderTags() {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.collectionFormCard}>
+          <Text style={styles.settingsEyebrow}>Create tag</Text>
+          <Text style={styles.collectionFormTitle}>Label across dates and albums</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Tag name"
+            placeholderTextColor="#7f858c"
+            value={tagForm.name}
+            onChangeText={(value) => setTagForm((currentValue) => ({ ...currentValue, name: value }))}
+          />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
+            {TAG_COLORS.map((color) => (
+              <Pressable
+                key={color}
+                style={[
+                  styles.colorDot,
+                  { backgroundColor: color },
+                  tagForm.color === color ? styles.colorDotActive : null
+                ]}
+                onPress={() => setTagForm((currentValue) => ({ ...currentValue, color }))}
+              />
+            ))}
+          </ScrollView>
+          <Pressable style={styles.secondaryButton} onPress={handleCreateTag}>
+            <Text style={styles.secondaryButtonText}>Create tag</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionRail}>
+          {tags.map((tag) => (
+            <Pressable
+              key={tag.id}
+              style={[
+                styles.collectionCard,
+                selectedTagID === tag.id ? styles.collectionCardActive : null
+              ]}
+              onPress={() => setSelectedTagID(tag.id)}
+            >
+              <View style={styles.tagHeader}>
+                <View style={[styles.inlineTagDot, { backgroundColor: tag.color || TAG_COLORS[0] }]} />
+                <Text style={styles.collectionCardTitle}>{tag.name}</Text>
+              </View>
+              <Text style={styles.collectionCardMeta}>{tag.fileCount} files</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        {selectedTag ? (
+          <View style={styles.collectionDetailCard}>
+            <View style={styles.collectionDetailHeader}>
+              <View style={styles.collectionDetailCopy}>
+                <Text style={styles.settingsEyebrow}>Tag detail</Text>
+                <View style={styles.tagHeader}>
+                  <View style={[styles.inlineTagDot, { backgroundColor: selectedTag.color || TAG_COLORS[0] }]} />
+                  <Text style={styles.collectionDetailTitle}>{selectedTag.name}</Text>
+                </View>
+                <Text style={styles.collectionDetailText}>
+                  Personal labels that can cut across your whole DRFT library.
+                </Text>
+              </View>
+              <View style={styles.collectionActionRow}>
+                {selectedItem ? (
+                  <Pressable style={styles.secondaryButton} onPress={handleRemoveFromSelectedTag}>
+                    <Text style={styles.secondaryButtonText}>Remove selected</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable style={styles.warnButton} onPress={handleDeleteTag}>
+                  <Text style={styles.warnButtonText}>Delete tag</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {suggestedFiles.length ? (
+              <View style={styles.addStrip}>
+                <Text style={styles.addStripTitle}>Tag from library</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+                  {suggestedFiles.map((file) => (
+                    <Pressable
+                      key={file.id}
+                      style={styles.pill}
+                      onPress={() => handleAddToSelectedTag(file.id)}
+                    >
+                      <Text style={styles.pillText}>{file.fileName}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            {renderMediaCollection(
+              "This tag is empty",
+              "Attach it to files from your library to make it useful."
+            )}
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No tag selected</Text>
+            <Text style={styles.emptyText}>Choose a tag above or create a new one.</Text>
+          </View>
+        )}
+      </ScrollView>
     );
   }
 
@@ -278,7 +834,10 @@ export default function TimelineScreen() {
 
       {activeSection === "settings" ? renderSettings() : null}
 
-      {activeSection === "settings" ? null : (
+      {activeSection === "albums" ? renderAlbums() : null}
+      {activeSection === "tags" ? renderTags() : null}
+
+      {["all", "image", "video"].includes(activeSection) ? (
         <SectionList
           sections={groupedItems}
           keyExtractor={(item, index) =>
@@ -287,7 +846,7 @@ export default function TimelineScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadFiles(false)}
+              onRefresh={() => initializeScreen()}
               tintColor="#8ab4f8"
             />
           }
@@ -298,38 +857,7 @@ export default function TimelineScreen() {
               <Text style={styles.sectionTitle}>{section.title}</Text>
             </View>
           )}
-          renderItem={({ item: row }) => (
-            <View style={styles.gridRow}>
-              {row.map((entry) => {
-                const tileHeight = getTileHeight(entry, tileWidth);
-
-                return (
-                  <Pressable
-                    key={entry.id}
-                    style={[styles.card, { width: tileWidth, height: tileHeight }]}
-                    onPress={() => setSelectedItem(entry)}
-                  >
-                    {entry.mediaType === "video" ? (
-                      <VideoPreviewTile item={entry} token={token} />
-                    ) : (
-                      <AuthenticatedImage
-                        downloadPath={entry.downloadUrl}
-                        previewPath={entry.previewUrl}
-                        style={styles.image}
-                        token={token}
-                      />
-                    )}
-                  </Pressable>
-                );
-              })}
-
-              {row.length < columnCount ? (
-                Array.from({ length: columnCount - row.length }).map((_, index) => (
-                  <View key={`spacer-${index}`} style={{ width: tileWidth, height: 1 }} />
-                ))
-              ) : null}
-            </View>
-          )}
+          renderItem={({ item: row }) => renderGridRow(row)}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No media yet</Text>
@@ -339,12 +867,13 @@ export default function TimelineScreen() {
             </View>
           }
         />
-      )}
+      ) : null}
+
       <MediaViewerModal
-        items={filteredItems}
+        items={viewerItems}
         onClose={() => setSelectedItem(null)}
         onDelete={handleDeleteItem}
-        selectedIndex={selectedItem ? filteredItems.findIndex((item) => item.id === selectedItem.id) : 0}
+        selectedIndex={selectedItem ? viewerItems.findIndex((item) => item.id === selectedItem.id) : 0}
         token={token}
         visible={Boolean(selectedItem)}
       />
@@ -434,12 +963,26 @@ const styles = StyleSheet.create({
     color: "#f1f3f4",
     fontWeight: "600"
   },
+  warnButton: {
+    backgroundColor: "#312224",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  warnButtonText: {
+    color: "#f28b82",
+    fontWeight: "700"
+  },
   error: {
     color: "#f28b82",
     marginBottom: 12
   },
   listContent: {
     paddingBottom: 28
+  },
+  scrollContent: {
+    paddingBottom: 28,
+    gap: 16
   },
   sectionHeader: {
     marginBottom: 8,
@@ -517,5 +1060,126 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
     marginTop: 6
+  },
+  collectionFormCard: {
+    backgroundColor: "#202124",
+    borderRadius: 22,
+    padding: 18,
+    gap: 10
+  },
+  collectionFormTitle: {
+    color: "#f1f3f4",
+    fontSize: 22,
+    fontWeight: "800"
+  },
+  input: {
+    backgroundColor: "#2a2c30",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    color: "#f1f3f4"
+  },
+  collectionRail: {
+    gap: 10,
+    paddingRight: 12
+  },
+  collectionCard: {
+    width: 170,
+    borderRadius: 20,
+    backgroundColor: "#202124",
+    padding: 14,
+    gap: 6
+  },
+  collectionCardActive: {
+    backgroundColor: "#344055"
+  },
+  collectionCardTitle: {
+    color: "#f1f3f4",
+    fontSize: 17,
+    fontWeight: "700"
+  },
+  collectionCardMeta: {
+    color: "#aeb4bb",
+    fontSize: 13
+  },
+  collectionDetailCard: {
+    backgroundColor: "#202124",
+    borderRadius: 22,
+    padding: 18,
+    gap: 14
+  },
+  collectionDetailHeader: {
+    gap: 14
+  },
+  collectionDetailCopy: {
+    gap: 6
+  },
+  collectionDetailTitle: {
+    color: "#f1f3f4",
+    fontSize: 24,
+    fontWeight: "800"
+  },
+  collectionDetailText: {
+    color: "#aeb4bb",
+    fontSize: 15,
+    lineHeight: 22
+  },
+  collectionActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  addStrip: {
+    gap: 10
+  },
+  addStripTitle: {
+    color: "#f1f3f4",
+    fontSize: 15,
+    fontWeight: "700"
+  },
+  pillRow: {
+    gap: 10,
+    paddingRight: 12
+  },
+  pill: {
+    backgroundColor: "#2a2c30",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10
+  },
+  pillText: {
+    color: "#f1f3f4",
+    fontSize: 13,
+    fontWeight: "600"
+  },
+  collectionSections: {
+    gap: 6
+  },
+  collectionSection: {
+    gap: 2
+  },
+  colorRow: {
+    gap: 10,
+    paddingRight: 12
+  },
+  colorDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "transparent"
+  },
+  colorDotActive: {
+    borderColor: "#f1f3f4"
+  },
+  tagHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  inlineTagDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 999
   }
 });

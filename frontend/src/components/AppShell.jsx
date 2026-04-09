@@ -6,7 +6,9 @@ import StatusBanner from "./StatusBanner";
 
 const mediaNavigationItems = [
   { to: "/photos", label: "Photos", icon: "photos" },
-  { to: "/photos?filter=video", label: "Videos", icon: "devices" }
+  { to: "/photos?filter=video", label: "Videos", icon: "devices" },
+  { to: "/albums", label: "Albums", icon: "albums" },
+  { to: "/tags", label: "Tags", icon: "tags" }
 ];
 
 const managementNavigationItems = [
