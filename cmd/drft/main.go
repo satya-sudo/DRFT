@@ -16,6 +16,7 @@ import (
 	"drft/internal/auth"
 	"drft/internal/app"
 	"drft/internal/config"
+	"drft/internal/version"
 	"drft/migrations"
 	_ "github.com/lib/pq"
 )
@@ -53,7 +54,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("server starting", "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
+		logger.Info("server starting", "addr", cfg.HTTPAddr, "env", cfg.AppEnv, "version", version.Value)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server failed", "error", err)
 			os.Exit(1)

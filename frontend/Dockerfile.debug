@@ -1,0 +1,22 @@
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && update-ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --no-fund --no-audit \
+  && printf '\nROOT PACKAGE:\n' \
+  && cat package.json \
+  && printf '\nNODE_MODULES:\n' \
+  && ls -la node_modules | sed -n '1,60p' \
+  && printf '\nVITE PACKAGE:\n' \
+  && ls -la node_modules/vite \
+  && printf '\nBIN DIR:\n' \
+  && ls -la node_modules/.bin
+
+COPY . .
+RUN printf '\nAFTER COPY BIN DIR:\n' && ls -la node_modules/.bin

@@ -55,16 +55,25 @@ cd mobile
 npm run start -- --clear
 ```
 
-Docker backend:
+Docker full stack:
 
 ```bash
 make docker-up
 ```
 
-Docker full stack:
-
 - web: `http://localhost:3000`
 - api: `http://localhost:8080`
+
+Note:
+
+- `make docker-up` builds the frontend inside Docker
+- if your network uses a custom npm registry, proxy, or trusted CA, pass them through Docker build args via environment variables:
+  - `DRFT_NPM_REGISTRY`
+  - `DRFT_NPM_STRICT_SSL`
+  - `DRFT_EXTRA_CA_CERT_BASE64`
+  - `HTTP_PROXY`
+  - `HTTPS_PROXY`
+  - `NO_PROXY`
 
 ## Current Highlights
 

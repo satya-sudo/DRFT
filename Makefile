@@ -28,4 +28,4 @@ docker-down:
 	docker compose down
 
 docker-logs:
-	docker compose logs -f drft-api postgres
+	docker compose logs -f drft-api drft-web postgres

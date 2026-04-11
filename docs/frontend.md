@@ -8,6 +8,19 @@
 - vanilla CSS
 - React Router
 
+## Docker web serving
+
+For Docker, DRFT uses a multi-stage frontend image:
+
+- a Node builder stage runs `npm ci` and `npm run build`
+- nginx serves the built static output
+
+The Docker build also supports:
+
+- custom npm registry
+- proxy environment variables
+- optional custom CA certificate passed as base64
+
 ## Current frontend pages
 
 - `/setup/admin`
@@ -79,4 +92,3 @@ The sidebar currently contains:
 - better mobile media viewer controls
 - hover-to-preview refinements
 - device/session UI once backend exists
-

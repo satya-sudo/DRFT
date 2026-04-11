@@ -1,0 +1,42 @@
+FROM node:20-bookworm-slim AS builder
+
+WORKDIR /app
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG NPM_STRICT_SSL=true
+ARG EXTRA_CA_CERT_BASE64=""
+
+ENV HTTP_PROXY=${HTTP_PROXY}
+ENV HTTPS_PROXY=${HTTPS_PROXY}
+ENV NO_PROXY=${NO_PROXY}
+ENV http_proxy=${HTTP_PROXY}
+ENV https_proxy=${HTTPS_PROXY}
+ENV no_proxy=${NO_PROXY}
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && if [ -n "$EXTRA_CA_CERT_BASE64" ]; then \
+    printf '%s' "$EXTRA_CA_CERT_BASE64" | base64 -d > /usr/local/share/ca-certificates/drft-extra-ca.crt; \
+  fi \
+  && update-ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm config set registry "$NPM_REGISTRY" \
+  && npm config set strict-ssl "$NPM_STRICT_SSL" \
+  && npm ci --no-fund --no-audit
+
+COPY . .
+RUN npm run build
+
+FROM nginx:1.27-alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -40,7 +40,14 @@ services:
   drft-web:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.web
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        NPM_REGISTRY: ${DRFT_NPM_REGISTRY:-https://registry.npmjs.org/}
+        NPM_STRICT_SSL: ${DRFT_NPM_STRICT_SSL:-true}
+        EXTRA_CA_CERT_BASE64: ${DRFT_EXTRA_CA_CERT_BASE64:-}
     container_name: drft-web
     depends_on:
       - drft-api

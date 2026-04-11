@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import DrftLogo from "./DrftLogo";
@@ -25,8 +26,9 @@ export default function AppShell({
   sidebarContent,
   children
 }) {
-  const { demoMode, logout, user } = useApp();
+  const { demoMode, frontendVersion, logout, refreshServerStatus, serverStatus, user } = useApp();
   const location = useLocation();
+  const [statusOpen, setStatusOpen] = useState(false);
 
   function isNavItemActive(item) {
     const [pathname, query = ""] = item.to.split("?");
@@ -139,7 +141,70 @@ export default function AppShell({
             </div>
           )}
 
-          <div className="page-toolbar">{actions}</div>
+          <div className="page-toolbar">
+            <div className="status-menu">
+              <button
+                type="button"
+                className={statusOpen ? "ghost-button status-button status-button-active" : "ghost-button status-button"}
+                onClick={() => setStatusOpen((currentValue) => !currentValue)}
+              >
+                <span
+                  className={
+                    serverStatus.connected
+                      ? "system-status-dot system-status-dot-ok"
+                      : "system-status-dot system-status-dot-error"
+                  }
+                />
+                <span>Server</span>
+              </button>
+
+              {statusOpen ? (
+                <div className="system-status-popover surface">
+                  <div className="system-status-header">
+                    <strong>Server status</strong>
+                    <button
+                      type="button"
+                      className="status-refresh-button"
+                      onClick={() => refreshServerStatus().catch(() => {})}
+                    >
+                      {serverStatus.checking ? "Checking..." : "Check now"}
+                    </button>
+                  </div>
+                  <div className="system-status-row">
+                    <span
+                      className={
+                        serverStatus.connected
+                          ? "system-status-dot system-status-dot-ok"
+                          : "system-status-dot system-status-dot-error"
+                      }
+                    />
+                    <strong>{serverStatus.connected ? "Connected" : "Disconnected"}</strong>
+                  </div>
+                  <div className="system-version-grid">
+                    <div>
+                      <span>Frontend</span>
+                      <strong>v{frontendVersion}</strong>
+                    </div>
+                    <div>
+                      <span>Backend</span>
+                      <strong>
+                        {serverStatus.backendVersion ? `v${serverStatus.backendVersion}` : "Unknown"}
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="system-meta-row">
+                    <span>Environment</span>
+                    <strong>{serverStatus.env || "Unknown"}</strong>
+                  </div>
+                  {serverStatus.error ? (
+                    <p className="system-status-error">{serverStatus.error}</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="page-toolbar-actions">{actions}</div>
+          </div>
         </header>
 
         <div className="page-intro">

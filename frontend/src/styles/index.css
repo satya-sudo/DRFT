@@ -411,6 +411,62 @@ video {
   background: transparent;
 }
 
+.system-status-header,
+.system-meta-row,
+.system-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.status-refresh-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+}
+
+.system-status-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.system-status-dot-ok {
+  background: #81c995;
+  box-shadow: 0 0 0 6px rgba(129, 201, 149, 0.12);
+}
+
+.system-status-dot-error {
+  background: var(--danger);
+  box-shadow: 0 0 0 6px rgba(242, 139, 130, 0.12);
+}
+
+.system-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.system-version-grid div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.system-version-grid span,
+.system-meta-row span,
+.system-status-error {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.system-status-error {
+  margin: 0;
+}
+
 .sidebar-content {
   padding: 0.95rem;
   border-radius: 16px;
@@ -466,6 +522,36 @@ video {
   display: flex;
   align-items: center;
   gap: 0.9rem;
+}
+
+.page-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.status-menu {
+  position: relative;
+}
+
+.status-button {
+  min-width: 7rem;
+}
+
+.status-button-active {
+  background: var(--bg-control-hover);
+}
+
+.system-status-popover {
+  position: absolute;
+  top: calc(100% + 0.7rem);
+  right: 0;
+  width: min(22rem, 80vw);
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem;
+  z-index: 30;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
 }
 
 .upload-actions {
@@ -1129,8 +1215,28 @@ video {
     align-items: stretch;
   }
 
+  .page-toolbar-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .upload-actions {
     justify-content: stretch;
+  }
+
+  .status-menu {
+    width: 100%;
+  }
+
+  .status-button {
+    width: 100%;
+  }
+
+  .system-status-popover {
+    position: static;
+    width: 100%;
+    margin-top: 0.75rem;
   }
 
   .upload-queue-popover {

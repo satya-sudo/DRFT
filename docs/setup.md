@@ -38,11 +38,16 @@ Backend runs on:
 
 ## Docker setup
 
-Start backend and PostgreSQL:
+Start the full stack:
 
 ```bash
 make docker-up
 ```
+
+What happens:
+
+- Docker builds the web app in a frontend builder stage
+- Docker starts PostgreSQL, the Go API, and nginx for the web app
 
 Useful commands:
 
@@ -55,6 +60,30 @@ Persisted Docker volumes:
 
 - `drft_postgres_data`
 - `drft_storage`
+
+Web and API endpoints:
+
+- web: `http://localhost:3000`
+- api: `http://localhost:8080`
+
+### Docker build networking
+
+If the frontend Docker build runs behind a proxy, private registry, or custom CA, pass these environment variables before `make docker-up`:
+
+- `DRFT_NPM_REGISTRY`
+- `DRFT_NPM_STRICT_SSL`
+- `DRFT_EXTRA_CA_CERT_BASE64`
+- `HTTP_PROXY`
+- `HTTPS_PROXY`
+- `NO_PROXY`
+
+Example:
+
+```bash
+export DRFT_NPM_REGISTRY=https://registry.npmjs.org/
+export DRFT_NPM_STRICT_SSL=false
+make docker-up
+```
 
 ## First admin setup
 
