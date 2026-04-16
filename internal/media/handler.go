@@ -1,11 +1,14 @@
 package media
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -37,6 +40,8 @@ func NewHandler(cfg config.Config, logger *slog.Logger, authHandler *auth.Handle
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/upload", h.handleUpload)
+	mux.HandleFunc("/api/v1/uploads/init", h.handleChunkUploadInit)
+	mux.HandleFunc("/api/v1/uploads/", h.handleChunkUploadByID)
 	mux.HandleFunc("/api/v1/files", h.handleListFiles)
 	mux.HandleFunc("/api/v1/storage/stats", h.handleStorageStats)
 	mux.HandleFunc("/api/v1/file/", h.handleFileByID)
@@ -93,85 +98,218 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	fileID, err := generateID()
-	if err != nil {
-		h.serverError(w, err)
-		return
-	}
-	originalExt := filepath.Ext(header.Filename)
-	storageKey := buildStorageKey(fileID, originalExt)
-
-	bufferedFile, err := prepareUpload(file)
-	if err != nil {
-		h.serverError(w, err)
-		return
-	}
-
-	mediaType := mediaTypeFromMIME(bufferedFile.MIMEType)
-	if mediaType == "" {
-		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "only image and video uploads are supported"})
-		return
-	}
-
-	savedPath, writtenBytes, err := writeFile(h.cfg.StorageRoot, storageKey, bufferedFile.Reader)
-	if err != nil {
-		h.serverError(w, err)
-		return
-	}
-
-	checksum, err := computeSHA256(savedPath)
-	if err != nil {
-		_ = removeFileIfExists(savedPath)
-		h.serverError(w, err)
-		return
-	}
-
-	metadata, err := extractMetadata(savedPath, mediaType)
-	if err != nil {
-		_ = removeFileIfExists(savedPath)
-		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "uploaded file could not be processed"})
-		return
-	}
-
-	thumbnailKey := ""
-	if mediaType == "image" {
-		thumbnailKey, err = generateThumbnail(h.cfg.StorageRoot, savedPath, fileID)
-		if err != nil {
-			h.logger.Warn("thumbnail generation failed", "error", err, "path", savedPath)
-		}
-	}
-
 	takenAt := parseOptionalTime(r.FormValue("taken_at"))
-	if takenAt == nil {
-		takenAt = metadata.TakenAt
-	}
-	createdFile, err := h.store.CreateFile(r.Context(), CreateFileInput{
-		UserID:            user.ID,
-		FileName:          fileNameWithoutExt(header.Filename, originalExt),
-		OriginalExtension: strings.TrimPrefix(originalExt, "."),
-		StorageKey:        storageKey,
-		MIMEType:          bufferedFile.MIMEType,
-		SizeBytes:         writtenBytes,
-		MediaType:         mediaType,
-		ChecksumSHA256:    checksum,
-		WidthPX:           metadata.WidthPX,
-		HeightPX:          metadata.HeightPX,
-		DurationMS:        metadata.DurationMS,
-		ThumbnailKey:      thumbnailKey,
-		TakenAt:           takenAt,
-	})
+	createdFile, err := h.ingestMedia(r.Context(), user.ID, header.Filename, takenAt, file)
 	if err != nil {
-		_ = removeFileIfExists(savedPath)
-		if thumbnailKey != "" {
-			_ = removeFileIfExists(filepath.Join(h.cfg.StorageRoot, thumbnailKey))
-		}
-		h.writeStoreError(w, err)
+		h.writeIngestError(w, err)
 		return
 	}
 
 	response.JSON(w, http.StatusCreated, map[string]any{
 		"item": h.serializeFile(createdFile),
 	})
+}
+
+func (h *Handler) handleChunkUploadInit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeUploadMethodNotAllowed(w)
+		return
+	}
+
+	user, err := h.auth.Authenticate(r)
+	if err != nil {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var payload struct {
+		FileName  string `json:"fileName"`
+		SizeBytes int64  `json:"sizeBytes"`
+		MIMEType  string `json:"mimeType"`
+		TakenAt   string `json:"takenAt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "upload session payload is invalid"})
+		return
+	}
+	if strings.TrimSpace(payload.FileName) == "" || payload.SizeBytes <= 0 {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "file name and size are required"})
+		return
+	}
+
+	uploadID, err := generateID()
+	if err != nil {
+		h.serverError(w, err)
+		return
+	}
+
+	totalChunks := int((payload.SizeBytes + defaultChunkSizeBytes - 1) / defaultChunkSizeBytes)
+	session := chunkUploadSession{
+		ID:           uploadID,
+		UserID:       user.ID,
+		FileName:     payload.FileName,
+		SizeBytes:    payload.SizeBytes,
+		MIMEType:     payload.MIMEType,
+		TakenAt:      payload.TakenAt,
+		ChunkSize:    defaultChunkSizeBytes,
+		TotalChunks:  totalChunks,
+		Received:     []int{},
+		CreatedAtUTC: time.Now().UTC(),
+	}
+
+	if err := createChunkUploadSession(h.cfg.StorageRoot, session); err != nil {
+		h.serverError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"uploadId":   session.ID,
+		"chunkSize":  session.ChunkSize,
+		"totalChunks": session.TotalChunks,
+	})
+}
+
+func (h *Handler) handleChunkUploadByID(w http.ResponseWriter, r *http.Request) {
+	user, err := h.auth.Authenticate(r)
+	if err != nil {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	trimmed := strings.TrimPrefix(r.URL.Path, "/api/v1/uploads/")
+	if trimmed == "" {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "upload id is required"})
+		return
+	}
+
+	switch {
+	case strings.HasSuffix(trimmed, "/complete"):
+		uploadID := strings.TrimSuffix(trimmed, "/complete")
+		h.handleChunkUploadComplete(w, r, user.ID, strings.TrimSuffix(uploadID, "/"))
+	case strings.Contains(trimmed, "/chunks/"):
+		uploadID, chunkIndex, err := parseChunkIndexFromPath(r.URL.Path)
+		if err != nil {
+			response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		h.handleChunkUploadChunk(w, r, user.ID, uploadID, chunkIndex)
+	default:
+		if r.Method == http.MethodDelete {
+			h.handleChunkUploadCancel(w, r, user.ID, strings.TrimSuffix(trimmed, "/"))
+			return
+		}
+		writeUploadMethodNotAllowed(w)
+	}
+}
+
+func (h *Handler) handleChunkUploadChunk(w http.ResponseWriter, r *http.Request, userID, uploadID string, chunkIndex int) {
+	if r.Method != http.MethodPut {
+		writeUploadMethodNotAllowed(w)
+		return
+	}
+
+	session, err := loadChunkUploadSession(h.cfg.StorageRoot, uploadID)
+	if err != nil {
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "upload session not found"})
+		return
+	}
+	if session.UserID != userID {
+		response.JSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	if chunkIndex < 0 || chunkIndex >= session.TotalChunks {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "chunk index is out of range"})
+		return
+	}
+
+	expectedBytes := chunkBytesForIndex(session, chunkIndex)
+	if _, err := writeChunkFile(h.cfg.StorageRoot, uploadID, chunkIndex, r.Body, expectedBytes); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	appendChunkIfMissing(&session, chunkIndex)
+	if err := saveChunkUploadSession(h.cfg.StorageRoot, session); err != nil {
+		h.serverError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"uploadId":      session.ID,
+		"receivedCount": len(session.Received),
+		"totalChunks":   session.TotalChunks,
+	})
+}
+
+func (h *Handler) handleChunkUploadComplete(w http.ResponseWriter, r *http.Request, userID, uploadID string) {
+	if r.Method != http.MethodPost {
+		writeUploadMethodNotAllowed(w)
+		return
+	}
+
+	session, err := loadChunkUploadSession(h.cfg.StorageRoot, uploadID)
+	if err != nil {
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "upload session not found"})
+		return
+	}
+	if session.UserID != userID {
+		response.JSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	if !sessionIsComplete(session) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "upload is missing one or more chunks"})
+		return
+	}
+
+	mergedPath, err := mergeChunkUpload(h.cfg.StorageRoot, session)
+	if err != nil {
+		h.serverError(w, err)
+		return
+	}
+	defer func() {
+		_ = deleteChunkUploadSession(h.cfg.StorageRoot, uploadID)
+	}()
+
+	mergedFile, err := os.Open(mergedPath)
+	if err != nil {
+		h.serverError(w, err)
+		return
+	}
+	defer mergedFile.Close()
+
+	takenAt := parseOptionalTime(session.TakenAt)
+	createdFile, err := h.ingestMedia(r.Context(), userID, session.FileName, takenAt, mergedFile)
+	if err != nil {
+		h.writeIngestError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"item": h.serializeFile(createdFile),
+	})
+}
+
+func (h *Handler) handleChunkUploadCancel(w http.ResponseWriter, r *http.Request, userID, uploadID string) {
+	if r.Method != http.MethodDelete {
+		writeUploadMethodNotAllowed(w)
+		return
+	}
+
+	session, err := loadChunkUploadSession(h.cfg.StorageRoot, uploadID)
+	if err != nil {
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "upload session not found"})
+		return
+	}
+	if session.UserID != userID {
+		response.JSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	if err := deleteChunkUploadSession(h.cfg.StorageRoot, uploadID); err != nil {
+		h.serverError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (h *Handler) handleStorageStats(w http.ResponseWriter, r *http.Request) {
@@ -314,6 +452,90 @@ func (h *Handler) serializeFile(file File) map[string]any {
 		"previewUrl":  fmt.Sprintf("/api/v1/file/%s?variant=preview", file.ID),
 		"downloadUrl": fmt.Sprintf("/api/v1/file/%s", file.ID),
 	}
+}
+
+func (h *Handler) ingestMedia(ctx context.Context, userID, originalFileName string, takenAt *time.Time, source io.Reader) (File, error) {
+	fileID, err := generateID()
+	if err != nil {
+		return File{}, err
+	}
+
+	originalExt := filepath.Ext(originalFileName)
+	storageKey := buildStorageKey(fileID, originalExt)
+
+	bufferedFile, err := prepareUpload(source)
+	if err != nil {
+		return File{}, err
+	}
+
+	mediaType := mediaTypeFromMIME(bufferedFile.MIMEType)
+	if mediaType == "" {
+		return File{}, fmt.Errorf("only image and video uploads are supported")
+	}
+
+	savedPath, writtenBytes, err := writeFile(h.cfg.StorageRoot, storageKey, bufferedFile.Reader)
+	if err != nil {
+		return File{}, err
+	}
+
+	checksum, err := computeSHA256(savedPath)
+	if err != nil {
+		_ = removeFileIfExists(savedPath)
+		return File{}, err
+	}
+
+	metadata, err := extractMetadata(savedPath, mediaType)
+	if err != nil {
+		_ = removeFileIfExists(savedPath)
+		return File{}, fmt.Errorf("uploaded file could not be processed")
+	}
+
+	thumbnailKey := ""
+	if mediaType == "image" {
+		thumbnailKey, err = generateThumbnail(h.cfg.StorageRoot, savedPath, fileID)
+		if err != nil {
+			h.logger.Warn("thumbnail generation failed", "error", err, "path", savedPath)
+		}
+	}
+
+	if takenAt == nil {
+		takenAt = metadata.TakenAt
+	}
+	createdFile, err := h.store.CreateFile(ctx, CreateFileInput{
+		UserID:            userID,
+		FileName:          fileNameWithoutExt(originalFileName, originalExt),
+		OriginalExtension: strings.TrimPrefix(originalExt, "."),
+		StorageKey:        storageKey,
+		MIMEType:          bufferedFile.MIMEType,
+		SizeBytes:         writtenBytes,
+		MediaType:         mediaType,
+		ChecksumSHA256:    checksum,
+		WidthPX:           metadata.WidthPX,
+		HeightPX:          metadata.HeightPX,
+		DurationMS:        metadata.DurationMS,
+		ThumbnailKey:      thumbnailKey,
+		TakenAt:           takenAt,
+	})
+	if err != nil {
+		_ = removeFileIfExists(savedPath)
+		if thumbnailKey != "" {
+			_ = removeFileIfExists(filepath.Join(h.cfg.StorageRoot, thumbnailKey))
+		}
+		return File{}, err
+	}
+
+	return createdFile, nil
+}
+
+func (h *Handler) writeIngestError(w http.ResponseWriter, err error) {
+	if strings.Contains(err.Error(), "only image and video uploads are supported") ||
+		strings.Contains(err.Error(), "uploaded file could not be processed") ||
+		strings.Contains(err.Error(), "chunk exceeds expected size") {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.writeStoreError(w, err)
 }
 
 func (h *Handler) writeStoreError(w http.ResponseWriter, err error) {

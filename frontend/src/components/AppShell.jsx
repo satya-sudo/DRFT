@@ -213,6 +213,8 @@ export default function AppShell({
                             <span>
                               {upload.status === "error"
                                 ? upload.error
+                                : upload.status === "retrying"
+                                  ? upload.error
                                 : upload.status === "done"
                                   ? "Done"
                                   : `${upload.progress}%`}

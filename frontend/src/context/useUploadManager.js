@@ -79,13 +79,34 @@ export function useUploadManager(token) {
       const uploadID = createUploadID(file);
 
       try {
-        await filesApi.uploadFileWithProgress(token, file, (progress) => {
-          setUploadQueue((currentValue) =>
-            currentValue.map((entry) =>
-              entry.id === uploadID ? { ...entry, progress } : entry
-            )
-          );
-        });
+        await filesApi.uploadFileWithProgress(
+          token,
+          file,
+          (progress) => {
+            setUploadQueue((currentValue) =>
+              currentValue.map((entry) =>
+                entry.id === uploadID
+                  ? { ...entry, progress, status: "uploading", error: "" }
+                  : entry
+              )
+            );
+          },
+          {
+            onChunkRetry: ({ attempt, error }) => {
+              setUploadQueue((currentValue) =>
+                currentValue.map((entry) =>
+                  entry.id === uploadID
+                    ? {
+                        ...entry,
+                        status: "retrying",
+                        error: `Retry ${attempt} in progress: ${error}`
+                      }
+                    : entry
+                )
+              );
+            }
+          }
+        );
 
         setUploadQueue((currentValue) =>
           currentValue.map((entry) =>

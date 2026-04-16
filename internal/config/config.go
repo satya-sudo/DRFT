@@ -16,6 +16,7 @@ type Config struct {
 	StorageRoot        string
 	JWTSecret          string
 	MaxUploadSizeBytes int64
+	UploadSessionTTLHours int64
 	SMTPHost           string
 	SMTPPort           string
 	SMTPUsername       string
@@ -33,6 +34,7 @@ func Load() (Config, error) {
 		StorageRoot:        getEnv("DRFT_STORAGE_ROOT", "./storage"),
 		JWTSecret:          getEnv("DRFT_JWT_SECRET", ""),
 		MaxUploadSizeBytes: getEnvInt64("DRFT_MAX_UPLOAD_SIZE_BYTES", defaultMaxUploadSizeBytes),
+		UploadSessionTTLHours: getEnvInt64("DRFT_UPLOAD_SESSION_TTL_HOURS", 24),
 		SMTPHost:           getEnv("DRFT_SMTP_HOST", ""),
 		SMTPPort:           getEnv("DRFT_SMTP_PORT", ""),
 		SMTPUsername:       getEnv("DRFT_SMTP_USERNAME", ""),

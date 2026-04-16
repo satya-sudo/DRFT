@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"drft/internal/auth"
 	"drft/internal/config"
@@ -23,6 +24,7 @@ type App struct {
 	auth   *auth.Handler
 	media  *media.Handler
 	library *library.Handler
+	stopUploadCleanup func()
 }
 
 func New(cfg config.Config, logger *slog.Logger) (*App, error) {
@@ -46,6 +48,11 @@ func New(cfg config.Config, logger *slog.Logger) (*App, error) {
 	}
 
 	authHandler := auth.NewHandler(cfg, logger, db)
+	uploadSessionTTL := time.Duration(cfg.UploadSessionTTLHours) * time.Hour
+	if err := media.CleanupStaleUploads(cfg.StorageRoot, uploadSessionTTL, logger); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("cleanup stale uploads: %w", err)
+	}
 
 	return &App{
 		cfg:    cfg,
@@ -54,6 +61,7 @@ func New(cfg config.Config, logger *slog.Logger) (*App, error) {
 		auth:   authHandler,
 		media:  media.NewHandler(cfg, logger, authHandler, db),
 		library: library.NewHandler(logger, authHandler, db),
+		stopUploadCleanup: media.StartUploadCleanupLoop(cfg.StorageRoot, uploadSessionTTL, logger),
 	}, nil
 }
 
@@ -70,6 +78,10 @@ func (a *App) Routes() http.Handler {
 }
 
 func (a *App) Close() error {
+	if a.stopUploadCleanup != nil {
+		a.stopUploadCleanup()
+	}
+
 	if a.db != nil {
 		return a.db.Close()
 	}
