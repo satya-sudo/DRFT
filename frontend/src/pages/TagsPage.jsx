@@ -1,91 +1,55 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import AppShell from "../components/AppShell";
-import MediaGrid from "../components/MediaGrid";
+import CollectionDetailPanel from "../components/CollectionDetailPanel";
+import CollectionListPanel from "../components/CollectionListPanel";
 import MediaViewer from "../components/MediaViewer";
 import { useApp } from "../context/AppContext";
-import * as filesAPI from "../lib/api/files";
+import { useSelectableCollection } from "../lib/collections/useSelectableCollection";
 import * as libraryAPI from "../lib/api/library";
 
 const DEFAULT_COLORS = ["#8ab4f8", "#81c995", "#f6c36d", "#f28b82", "#c58af9", "#78d9ec"];
 
 export default function TagsPage() {
   const { token } = useApp();
-  const [tags, setTags] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [selectedTagID, setSelectedTagID] = useState("");
-  const [selectedTag, setSelectedTag] = useState(null);
-  const [searchValue, setSearchValue] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [viewerPanel, setViewerPanel] = useState("none");
   const [form, setForm] = useState({
     name: "",
     color: DEFAULT_COLORS[0]
   });
-
-  useEffect(() => {
-    loadData();
-  }, [token]);
-
-  useEffect(() => {
-    if (!tags.length) {
-      setSelectedTagID("");
-      setSelectedTag(null);
-      return;
-    }
-
-    if (!selectedTagID || !tags.some((tag) => tag.id === selectedTagID)) {
-      setSelectedTagID(tags[0].id);
-      return;
-    }
-
-    loadTag(selectedTagID);
-  }, [selectedTagID, tags]);
-
-  async function loadData() {
-    try {
-      setLoading(true);
-      setError("");
-      const [tagsResponse, filesResponse] = await Promise.all([
-        libraryAPI.listTags(token),
-        filesAPI.listFiles(token)
-      ]);
-      setTags(tagsResponse.tags || []);
-      setFiles(filesResponse.items || []);
-    } catch (loadError) {
-      setError(loadError.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadTag(tagID) {
-    if (!tagID) {
-      return;
-    }
-
-    try {
-      setDetailLoading(true);
-      setError("");
-      const response = await libraryAPI.getTag(token, tagID);
-      setSelectedTag({
+  const {
+    detailLoading,
+    error,
+    files,
+    filteredCollections: filteredTags,
+    loading,
+    refreshCollections: refreshTags,
+    searchValue,
+    selectedCollection: selectedTag,
+    selectedCollectionID: selectedTagID,
+    selectedItem,
+    setCollections: setTags,
+    setError,
+    setSearchValue,
+    setSelectedCollection: setSelectedTag,
+    setSelectedCollectionID: setSelectedTagID,
+    setSelectedItem,
+    setViewerPanel,
+    viewerPanel
+  } = useSelectableCollection({
+    token,
+    listCollections: async (sessionToken) => {
+      const response = await libraryAPI.listTags(sessionToken);
+      return response.tags || [];
+    },
+    getCollection: async (sessionToken, tagID) => {
+      const response = await libraryAPI.getTag(sessionToken, tagID);
+      return {
         ...response.tag,
         items: response.items || []
-      });
-    } catch (loadError) {
-      setError(loadError.message);
-    } finally {
-      setDetailLoading(false);
-    }
-  }
-
-  async function refreshTags() {
-    const response = await libraryAPI.listTags(token);
-    setTags(response.tags || []);
-  }
+      };
+    },
+    searchMatcher: (tag, query) => tag.name.toLowerCase().includes(query)
+  });
 
   async function handleCreateTag(event) {
     event.preventDefault();
@@ -118,7 +82,12 @@ export default function TagsPage() {
     try {
       setError("");
       await libraryAPI.addTagToFile(token, fileID, selectedTagID);
-      await Promise.all([loadTag(selectedTagID), refreshTags()]);
+      await refreshTags();
+      const response = await libraryAPI.getTag(token, selectedTagID);
+      setSelectedTag({
+        ...response.tag,
+        items: response.items || []
+      });
     } catch (actionError) {
       setError(actionError.message);
     }
@@ -133,7 +102,12 @@ export default function TagsPage() {
       setError("");
       await libraryAPI.removeTagFromFile(token, selectedItem.id, selectedTagID);
       setSelectedItem(null);
-      await Promise.all([loadTag(selectedTagID), refreshTags()]);
+      await refreshTags();
+      const response = await libraryAPI.getTag(token, selectedTagID);
+      setSelectedTag({
+        ...response.tag,
+        items: response.items || []
+      });
     } catch (actionError) {
       setError(actionError.message);
     }
@@ -159,15 +133,6 @@ export default function TagsPage() {
       setError(actionError.message);
     }
   }
-
-  const filteredTags = useMemo(() => {
-    const query = searchValue.trim().toLowerCase();
-    if (!query) {
-      return tags;
-    }
-
-    return tags.filter((tag) => tag.name.toLowerCase().includes(query));
-  }, [searchValue, tags]);
 
   const taggedItemIDs = new Set((selectedTag?.items || []).map((item) => item.id));
   const suggestedFiles = files
@@ -242,125 +207,78 @@ export default function TagsPage() {
           </button>
         </form>
 
-        <section className="surface library-sidebar-panel">
-          <div className="panel-header">
-            <div>
-              <span className="eyebrow">Labels</span>
-              <h2>Your tags</h2>
-            </div>
-            <span className="panel-count">{filteredTags.length} total</span>
-          </div>
-
-          {loading ? (
-            <div className="empty-state">
-              <h2>Loading tags</h2>
-              <p>Fetching your personal labels from DRFT.</p>
-            </div>
-          ) : filteredTags.length ? (
-            <div className="collection-list">
-              {filteredTags.map((tag) => (
-                <button
-                  type="button"
-                  key={tag.id}
-                  className={
-                    tag.id === selectedTagID
-                      ? "collection-card collection-card-active"
-                      : "collection-card"
-                  }
-                  onClick={() => setSelectedTagID(tag.id)}
-                >
-                  <div className="tag-card-title">
-                    <span className="tag-dot" style={{ backgroundColor: tag.color || DEFAULT_COLORS[0] }} />
-                    <strong>{tag.name}</strong>
-                  </div>
-                  <span>{tag.fileCount} files</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <h2>No tags yet</h2>
-              <p>Create a first label and start grouping media across albums and dates.</p>
-            </div>
-          )}
-        </section>
-
-        <section className="surface library-detail-panel">
-          {error ? <div className="form-error">{error}</div> : null}
-
-          {!selectedTagID ? (
-            <div className="empty-state">
-              <h2>Select a tag</h2>
-              <p>Choose a label from the left to see everything attached to it.</p>
-            </div>
-          ) : detailLoading || !selectedTag ? (
-            <div className="empty-state">
-              <h2>Loading tag</h2>
-              <p>Pulling tagged media into view.</p>
-            </div>
-          ) : (
-            <div className="library-detail-stack">
-              <div className="library-detail-header">
-                <div>
-                  <span className="eyebrow">Tag detail</span>
-                  <h2>{selectedTag.name}</h2>
-                  <p>Use this tag to cut across albums and dates without duplicating media.</p>
-                </div>
-                <div className="library-detail-actions">
-                  {selectedItem ? (
-                    <button type="button" className="ghost-button" onClick={handleDetachSelectedItem}>
-                      Remove selected
-                    </button>
-                  ) : null}
-                  <button type="button" className="ghost-button danger-button" onClick={handleDeleteTag}>
-                    Delete tag
-                  </button>
-                </div>
+        <CollectionListPanel
+          eyebrow="Labels"
+          title="Your tags"
+          countLabel={`${filteredTags.length} total`}
+          loading={loading}
+          loadingTitle="Loading tags"
+          loadingDescription="Fetching your personal labels from DRFT."
+          emptyTitle="No tags yet"
+          emptyDescription="Create a first label and start grouping media across albums and dates."
+          items={filteredTags}
+          selectedID={selectedTagID}
+          onSelect={setSelectedTagID}
+          renderItem={(tag) => (
+            <>
+              <div className="tag-card-title">
+                <span
+                  className="tag-dot"
+                  style={{ backgroundColor: tag.color || DEFAULT_COLORS[0] }}
+                />
+                <strong>{tag.name}</strong>
               </div>
+              <span>{tag.fileCount} files</span>
+            </>
+          )}
+        />
 
+        <CollectionDetailPanel
+          error={error}
+          emptySelectionTitle="Select a tag"
+          emptySelectionDescription="Choose a label from the left to see everything attached to it."
+          loading={detailLoading}
+          loadingTitle="Loading tag"
+          loadingDescription="Pulling tagged media into view."
+          selectedID={selectedTagID}
+          collection={selectedTag}
+          headerEyebrow="Tag detail"
+          headerTitle={selectedTag?.name || ""}
+          headerDescription="Use this tag to cut across albums and dates without duplicating media."
+          headerActions={
+            <>
+              {selectedItem ? (
+                <button type="button" className="ghost-button" onClick={handleDetachSelectedItem}>
+                  Remove selected
+                </button>
+              ) : null}
+              <button type="button" className="ghost-button danger-button" onClick={handleDeleteTag}>
+                Delete tag
+              </button>
+            </>
+          }
+          helperBanner={
+            selectedTag ? (
               <div className="tag-banner">
-                <span className="tag-dot" style={{ backgroundColor: selectedTag.color || DEFAULT_COLORS[0] }} />
+                <span
+                  className="tag-dot"
+                  style={{ backgroundColor: selectedTag.color || DEFAULT_COLORS[0] }}
+                />
                 <strong>{selectedTag.fileCount} files carry this tag</strong>
               </div>
-
-              {suggestedFiles.length ? (
-                <div className="picker-strip">
-                  <div className="picker-strip-header">
-                    <strong>Tag from library</strong>
-                    <span>{suggestedFiles.length} available</span>
-                  </div>
-                  <div className="picker-chip-row">
-                    {suggestedFiles.map((file) => (
-                      <button
-                        type="button"
-                        key={file.id}
-                        className="picker-chip"
-                        onClick={() => handleAttachFile(file.id)}
-                      >
-                        {file.fileName}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {selectedTag.items?.length ? (
-                <MediaGrid
-                  items={selectedTag.items}
-                  onSelect={(item) => {
-                    setSelectedItem(item);
-                    setViewerPanel("none");
-                  }}
-                />
-              ) : (
-                <div className="empty-state">
-                  <h2>This tag is empty</h2>
-                  <p>Attach it to a few media items and it becomes a powerful cross-cutting filter.</p>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+            ) : null
+          }
+          pickerTitle="Tag from library"
+          pickerCount={`${suggestedFiles.length} available`}
+          pickerItems={suggestedFiles}
+          onPick={handleAttachFile}
+          emptyCollectionTitle="This tag is empty"
+          emptyCollectionDescription="Attach it to a few media items and it becomes a powerful cross-cutting filter."
+          onSelectItem={(item) => {
+            setSelectedItem(item);
+            setViewerPanel("none");
+          }}
+        />
       </div>
 
       <MediaViewer

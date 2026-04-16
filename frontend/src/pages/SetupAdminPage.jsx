@@ -48,14 +48,14 @@ export default function SetupAdminPage() {
 
   return (
     <AuthLayout
-      eyebrow="First-run setup"
-      title="Create the first DRFT admin"
-      description="Before anyone can log in, this private library needs one trusted admin account to own the instance."
+      eyebrow="Initial setup"
+      title="Create the first administrator"
+      description="Set up the first DRFT account for this instance. This account will manage users, storage, and library access."
     >
       <form className="form-stack" onSubmit={handleSubmit}>
         <div className="form-header">
-          <h2>Bootstrap admin</h2>
-          <p>This account will be able to invite and remove users later.</p>
+          <h2>Administrator account</h2>
+          <p>Choose the primary account that will manage this DRFT installation.</p>
         </div>
 
         <label>
@@ -104,7 +104,7 @@ export default function SetupAdminPage() {
         {error ? <div className="form-error">{error}</div> : null}
 
         <button type="submit" className="primary-button" disabled={submitting}>
-          {submitting ? "Creating admin..." : "Create admin and enter DRFT"}
+          {submitting ? "Creating account..." : "Create administrator"}
         </button>
       </form>
     </AuthLayout>

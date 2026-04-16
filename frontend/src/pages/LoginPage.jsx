@@ -32,13 +32,13 @@ export default function LoginPage() {
   return (
     <AuthLayout
       eyebrow="Welcome back"
-      title="Sign in to your DRFT library"
-      description="Use the admin or invited user account to browse your photos, watch clips, and manage the instance."
+      title="Sign in to DRFT"
+      description="Access your private library, continue uploads, and manage your media from one place."
     >
       <form className="form-stack" onSubmit={handleSubmit}>
         <div className="form-header">
-          <h2>Login</h2>
-          <p>Authentication will move seamlessly to JWT-backed API sessions.</p>
+          <h2>Account access</h2>
+          <p>Use the email address and password assigned to your DRFT account.</p>
         </div>
 
         <label>
@@ -76,7 +76,7 @@ export default function LoginPage() {
         {error ? <div className="form-error">{error}</div> : null}
 
         <button type="submit" className="primary-button" disabled={submitting}>
-          {submitting ? "Signing in..." : "Enter library"}
+          {submitting ? "Signing in..." : "Sign in"}
         </button>
 
         <Link className="text-link" to="/reset-password">

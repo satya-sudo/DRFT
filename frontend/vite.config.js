@@ -6,6 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/healthz": {
+        target: "http://localhost:8080",
+        changeOrigin: true
+      },
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true
@@ -13,4 +17,3 @@ export default defineConfig({
     }
   }
 });
-

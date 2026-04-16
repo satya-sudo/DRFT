@@ -36,7 +36,7 @@ function formatBytes(value) {
 }
 
 export default function PhotosPage() {
-  const { enqueueUploads, localUploadItems, token } = useApp();
+  const { enqueueUploads, localUploadItems, token, uploadActivityKey } = useApp();
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const [searchParams] = useSearchParams();
@@ -53,7 +53,7 @@ export default function PhotosPage() {
 
   useEffect(() => {
     loadFiles();
-  }, [token]);
+  }, [token, uploadActivityKey]);
 
   useEffect(() => {
     const nextFilter = searchParams.get("filter") || "all";
@@ -89,7 +89,6 @@ export default function PhotosPage() {
   async function handleLocalUpload(event) {
     const selectedFiles = Array.from(event.target.files || []);
     await enqueueUploads(selectedFiles);
-    await loadFiles();
     event.target.value = "";
   }
 
@@ -99,7 +98,6 @@ export default function PhotosPage() {
 
     const droppedFiles = Array.from(event.dataTransfer.files || []);
     await enqueueUploads(droppedFiles);
-    await loadFiles();
   }
 
   async function handleDeleteFile(item) {

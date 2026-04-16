@@ -1,5 +1,17 @@
 import { requestJSON } from "./client";
 
+function parseUploadResponse(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 export function listFiles(token) {
   return requestJSON("/api/v1/files", {
     headers: {
@@ -38,19 +50,32 @@ export function uploadFileWithProgress(token, file, onProgress) {
     });
 
     request.addEventListener("load", () => {
-      const payload = request.responseText ? JSON.parse(request.responseText) : null;
+      const payload = parseUploadResponse(request.responseText);
 
       if (request.status >= 200 && request.status < 300) {
         resolve(payload);
         return;
       }
 
-      reject(new Error(payload?.error || "Upload failed."));
+      reject(
+        new Error(
+          payload?.error ||
+            payload?.message ||
+            request.statusText ||
+            "Upload failed."
+        )
+      );
     });
 
     request.addEventListener("error", () => {
       reject(new Error("Unable to reach DRFT API"));
     });
+
+    request.addEventListener("timeout", () => {
+      reject(new Error("Upload timed out before DRFT finished processing it"));
+    });
+
+    request.timeout = 120000;
 
     request.send(body);
   });

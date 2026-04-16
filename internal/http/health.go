@@ -32,17 +32,4 @@ func registerHealthRoutes(mux *http.ServeMux, cfg config.Config) {
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
 	})
-
-	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			response.JSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-			return
-		}
-
-		response.JSON(w, http.StatusOK, map[string]string{
-			"service": version.Service,
-			"version": version.Value,
-			"env":     cfg.AppEnv,
-		})
-	})
 }

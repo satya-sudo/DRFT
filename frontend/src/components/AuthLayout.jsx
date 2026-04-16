@@ -1,9 +1,6 @@
-import { useApp } from "../context/AppContext";
 import DrftLogo from "./DrftLogo";
 
 export default function AuthLayout({ eyebrow, title, description, children }) {
-  const { demoMode } = useApp();
-
   return (
     <div className="auth-screen">
       <div className="auth-panel">
@@ -22,24 +19,18 @@ export default function AuthLayout({ eyebrow, title, description, children }) {
           <p>{description}</p>
           <div className="feature-list">
             <article className="feature-card">
-              <strong>Timeline first</strong>
-              <span>Browse photos and videos in a calm, visual flow.</span>
+              <strong>Private by default</strong>
+              <span>Your library stays under your control, on infrastructure you manage.</span>
             </article>
             <article className="feature-card">
-              <strong>Admin aware</strong>
-              <span>Bootstrap the first admin before anyone else gets in.</span>
+              <strong>Built for your archive</strong>
+              <span>Photos and videos stay organized in one timeline with albums and tags.</span>
             </article>
             <article className="feature-card">
-              <strong>Backend ready</strong>
-              <span>Uses API contracts now and falls back to demo mode safely.</span>
+              <strong>Designed to last</strong>
+              <span>Simple authentication, direct uploads, and storage visibility without extra clutter.</span>
             </article>
           </div>
-          {demoMode ? (
-            <div className="notice-banner">
-              Demo mode is active because the matching backend endpoints are not
-              ready yet.
-            </div>
-          ) : null}
         </div>
         <div className="auth-form surface">{children}</div>
       </div>
