@@ -16,17 +16,59 @@ function SplashScreen() {
 			<div className="splash-panel">
 				<span className="eyebrow">DRFT</span>
 				<h1>Preparing your private media cloud</h1>
+        <p>Checking server health, loading instance status, and validating your session.</p>
+      </div>
+    </div>
+  );
+}
+
+function ServiceUnavailableScreen() {
+  const { frontendVersion, initializeApp, serverStatus } = useApp();
+
+  return (
+    <div className="splash-screen">
+      <div className="splash-panel">
+        <span className="eyebrow">DRFT</span>
+        <h1>Service unavailable</h1>
         <p>
-          Loading setup status, checking your session, and getting the frontend
-          ready.
+          DRFT is temporarily unavailable. Please verify the server connection and try again.
         </p>
+        <div className="service-state-grid">
+          <div className="service-state-item">
+            <span>Frontend</span>
+            <strong>v{frontendVersion}</strong>
+          </div>
+          <div className="service-state-item">
+            <span>Backend</span>
+            <strong>{serverStatus.backendVersion ? `v${serverStatus.backendVersion}` : "Unknown"}</strong>
+          </div>
+          <div className="service-state-item service-state-item-full">
+            <span>Latest error</span>
+            <strong>{serverStatus.error || "Unable to reach DRFT API"}</strong>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => initializeApp().catch(() => {})}
+        >
+          {serverStatus.checking ? "Checking..." : "Check again"}
+        </button>
       </div>
     </div>
   );
 }
 
 function HomeRedirect() {
-  const { adminExists, user } = useApp();
+  const { adminExists, serverStatus, user } = useApp();
+
+  if (serverStatus.checking) {
+    return <SplashScreen />;
+  }
+
+  if (!serverStatus.connected) {
+    return <ServiceUnavailableScreen />;
+  }
 
   if (!adminExists) {
     return <Navigate replace to="/setup/admin" />;
@@ -40,7 +82,15 @@ function HomeRedirect() {
 }
 
 function SetupOnlyRoute({ children }) {
-  const { adminExists, user } = useApp();
+  const { adminExists, serverStatus, user } = useApp();
+
+  if (serverStatus.checking) {
+    return <SplashScreen />;
+  }
+
+  if (!serverStatus.connected) {
+    return <ServiceUnavailableScreen />;
+  }
 
   if (adminExists) {
     return <Navigate replace to={user ? "/photos" : "/login"} />;
@@ -50,7 +100,15 @@ function SetupOnlyRoute({ children }) {
 }
 
 function GuestRoute({ children }) {
-  const { adminExists, user } = useApp();
+  const { adminExists, serverStatus, user } = useApp();
+
+  if (serverStatus.checking) {
+    return <SplashScreen />;
+  }
+
+  if (!serverStatus.connected) {
+    return <ServiceUnavailableScreen />;
+  }
 
   if (!adminExists) {
     return <Navigate replace to="/setup/admin" />;
@@ -64,8 +122,16 @@ function GuestRoute({ children }) {
 }
 
 function ProtectedRoute({ children }) {
-  const { adminExists, user } = useApp();
+  const { adminExists, serverStatus, user } = useApp();
   const location = useLocation();
+
+  if (serverStatus.checking) {
+    return <SplashScreen />;
+  }
+
+  if (!serverStatus.connected) {
+    return <ServiceUnavailableScreen />;
+  }
 
   if (!adminExists) {
     return <Navigate replace to="/setup/admin" />;

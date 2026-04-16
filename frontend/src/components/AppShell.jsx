@@ -6,7 +6,8 @@ import { Icon } from "./Icons";
 import StatusBanner from "./StatusBanner";
 
 const mediaNavigationItems = [
-  { to: "/photos", label: "Photos", icon: "photos" },
+  { to: "/photos", label: "All", icon: "photos" },
+  { to: "/photos?filter=image", label: "Images", icon: "photos" },
   { to: "/photos?filter=video", label: "Videos", icon: "devices" },
   { to: "/albums", label: "Albums", icon: "albums" },
   { to: "/tags", label: "Tags", icon: "tags" }
@@ -26,9 +27,45 @@ export default function AppShell({
   sidebarContent,
   children
 }) {
-  const { demoMode, frontendVersion, logout, refreshServerStatus, serverStatus, user } = useApp();
+  const {
+    demoMode,
+    frontendVersion,
+    logout,
+    refreshServerStatus,
+    serverStatus,
+    uploadQueue,
+    uploadQueueOpen,
+    setUploadQueueOpen,
+    user
+  } = useApp();
   const location = useLocation();
   const [statusOpen, setStatusOpen] = useState(false);
+
+  const totalUploadBytes = uploadQueue.reduce(
+    (sum, upload) => sum + (upload.sizeBytes || 0),
+    0
+  );
+  const activeUploadCount = uploadQueue.filter((upload) => upload.status === "uploading").length;
+
+  function formatBytes(value) {
+    if (!Number.isFinite(value) || value < 0) {
+      return "Unknown";
+    }
+
+    if (value === 0) {
+      return "0 B";
+    }
+
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const exponent = Math.min(
+      Math.floor(Math.log(value) / Math.log(1024)),
+      units.length - 1
+    );
+    const amount = value / 1024 ** exponent;
+    const digits = amount >= 100 || exponent === 0 ? 0 : amount >= 10 ? 1 : 2;
+
+    return `${amount.toFixed(digits)} ${units[exponent]}`;
+  }
 
   function isNavItemActive(item) {
     const [pathname, query = ""] = item.to.split("?");
@@ -142,6 +179,60 @@ export default function AppShell({
           )}
 
           <div className="page-toolbar">
+            <div className="upload-queue-menu">
+              <button
+                type="button"
+                className={
+                  uploadQueueOpen
+                    ? "ghost-button upload-queue-toggle upload-queue-toggle-active"
+                    : "ghost-button upload-queue-toggle"
+                }
+                onClick={() => setUploadQueueOpen((currentValue) => !currentValue)}
+              >
+                <span>Queue</span>
+                <span className="upload-queue-count">{uploadQueue.length}</span>
+              </button>
+
+              {uploadQueueOpen ? (
+                <div className="surface upload-queue-popover">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Uploads</span>
+                      <h2>Transfer queue</h2>
+                    </div>
+                    <span className="panel-count">
+                      {activeUploadCount} active • {formatBytes(totalUploadBytes)}
+                    </span>
+                  </div>
+                  {uploadQueue.length > 0 ? (
+                    <div className="upload-list">
+                      {uploadQueue.map((upload) => (
+                        <div key={upload.id} className="upload-row">
+                          <div>
+                            <strong>{upload.name}</strong>
+                            <span>
+                              {upload.status === "error"
+                                ? upload.error
+                                : upload.status === "done"
+                                  ? "Done"
+                                  : `${upload.progress}%`}
+                            </span>
+                          </div>
+                          <div className="upload-progress">
+                            <div style={{ width: `${upload.progress}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="upload-queue-empty">
+                      <p>No uploads in progress right now.</p>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
             <div className="status-menu">
               <button
                 type="button"

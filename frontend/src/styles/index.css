@@ -170,6 +170,32 @@ video {
   text-align: center;
 }
 
+.service-state-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+  text-align: left;
+}
+
+.service-state-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
+  background: #242528;
+  border: 1px solid var(--line-soft);
+}
+
+.service-state-item span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.service-state-item-full {
+  grid-column: 1 / -1;
+}
+
 .splash-panel h1,
 .auth-copy h1,
 .form-header h2,

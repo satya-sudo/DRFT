@@ -15,19 +15,6 @@ function formatDateLabel(value) {
   }).format(new Date(value));
 }
 
-function createLocalMediaItems(fileList) {
-  return Array.from(fileList).map((file) => ({
-    id: `local-${file.name}-${file.lastModified}`,
-    fileName: file.name.replace(/\.[^.]+$/, ""),
-    mediaType: file.type.startsWith("video") ? "video" : "image",
-    mimeType: file.type,
-    sizeBytes: file.size,
-    takenAt: new Date().toISOString(),
-    previewUrl: URL.createObjectURL(file),
-    localOnly: true
-  }));
-}
-
 function formatBytes(value) {
   if (!Number.isFinite(value) || value < 0) {
     return "Unknown";
@@ -49,16 +36,13 @@ function formatBytes(value) {
 }
 
 export default function PhotosPage() {
-  const { token } = useApp();
+  const { enqueueUploads, localUploadItems, token } = useApp();
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
   const [storageStats, setStorageStats] = useState(null);
-  const [localItems, setLocalItems] = useState([]);
-  const [uploads, setUploads] = useState([]);
   const [dropActive, setDropActive] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [filter, setFilter] = useState(searchParams.get("filter") || "all");
   const [selectedItem, setSelectedItem] = useState(null);
@@ -102,64 +86,10 @@ export default function PhotosPage() {
     }
   }
 
-  async function processSelectedFiles(selectedFiles) {
-    if (selectedFiles.length === 0) {
-      return;
-    }
-
-    const previewItems = createLocalMediaItems(selectedFiles);
-    setLocalItems((currentValue) => [...previewItems, ...currentValue]);
-    setUploads(
-      selectedFiles.map((file) => ({
-        id: `upload-${file.name}-${file.lastModified}`,
-        name: file.name,
-        sizeBytes: file.size,
-        progress: 0,
-        status: "uploading"
-      }))
-    );
-
-    for (const selectedFile of selectedFiles) {
-      const uploadID = `upload-${selectedFile.name}-${selectedFile.lastModified}`;
-
-      try {
-        await filesAPI.uploadFileWithProgress(token, selectedFile, (progress) => {
-          setUploads((currentValue) =>
-            currentValue.map((entry) =>
-              entry.id === uploadID ? { ...entry, progress } : entry
-            )
-          );
-        });
-
-        setUploads((currentValue) =>
-          currentValue.map((entry) =>
-            entry.id === uploadID
-              ? { ...entry, progress: 100, status: "done" }
-              : entry
-          )
-        );
-      } catch (uploadError) {
-        setError(uploadError.message);
-        setUploads((currentValue) =>
-          currentValue.map((entry) =>
-            entry.id === uploadID
-              ? { ...entry, status: "error", error: uploadError.message }
-              : entry
-          )
-        );
-      }
-    }
-
-    setLocalItems([]);
-    setTimeout(() => {
-      setUploads([]);
-    }, 900);
-    await loadFiles();
-  }
-
   async function handleLocalUpload(event) {
     const selectedFiles = Array.from(event.target.files || []);
-    await processSelectedFiles(selectedFiles);
+    await enqueueUploads(selectedFiles);
+    await loadFiles();
     event.target.value = "";
   }
 
@@ -168,7 +98,8 @@ export default function PhotosPage() {
     setDropActive(false);
 
     const droppedFiles = Array.from(event.dataTransfer.files || []);
-    await processSelectedFiles(droppedFiles);
+    await enqueueUploads(droppedFiles);
+    await loadFiles();
   }
 
   async function handleDeleteFile(item) {
@@ -183,7 +114,6 @@ export default function PhotosPage() {
 
     if (item.localOnly) {
       setSelectedItem(null);
-      setLocalItems((currentValue) => currentValue.filter((entry) => entry.id !== item.id));
       setConfirmDeleteItem(null);
       return;
     }
@@ -198,7 +128,7 @@ export default function PhotosPage() {
     }
   }
 
-  const combinedItems = [...localItems, ...items].filter((item) => {
+  const combinedItems = [...localUploadItems, ...items].filter((item) => {
     const matchesFilter = filter === "all" ? true : item.mediaType === filter;
     const matchesSearch = item.fileName
       .toLowerCase()
@@ -223,16 +153,19 @@ export default function PhotosPage() {
 
   const imageCount = combinedItems.filter((item) => item.mediaType === "image").length;
   const videoCount = combinedItems.filter((item) => item.mediaType === "video").length;
-  const totalUploadBytes = uploads.reduce(
-    (sum, upload) => sum + (upload.sizeBytes || 0),
-    0
-  );
-  const activeUploadCount = uploads.filter((upload) => upload.status === "uploading").length;
+  const pageTitle =
+    filter === "image" ? "Images" : filter === "video" ? "Videos" : "All media";
+  const pageDescription =
+    filter === "image"
+      ? "Browse image uploads only, with the same timeline structure and global upload queue."
+      : filter === "video"
+        ? "Browse videos only, with global uploads still running in the background."
+        : "A calm, date-led view of your photos and videos with room for uploads, viewer details, and future device sync.";
 
   return (
     <AppShell
-      title="Photo timeline"
-      description="A calm, date-led view of your photos and videos with room for uploads, viewer details, and future device sync."
+      title={pageTitle}
+      description={pageDescription}
       searchValue={searchValue}
       onSearchChange={setSearchValue}
       sidebarContent={
@@ -267,56 +200,6 @@ export default function PhotosPage() {
       }
       actions={
         <div className="upload-actions">
-          <div className="upload-queue-menu">
-            <button
-              type="button"
-              className={queueOpen ? "ghost-button upload-queue-toggle upload-queue-toggle-active" : "ghost-button upload-queue-toggle"}
-              onClick={() => setQueueOpen((currentValue) => !currentValue)}
-            >
-              <span>Queue</span>
-              <span className="upload-queue-count">{uploads.length}</span>
-            </button>
-
-            {queueOpen ? (
-              <div className="surface upload-queue-popover">
-                <div className="panel-header">
-                  <div>
-                    <span className="eyebrow">Uploads</span>
-                    <h2>Transfer queue</h2>
-                  </div>
-                  <span className="panel-count">
-                    {activeUploadCount} active • {formatBytes(totalUploadBytes)}
-                  </span>
-                </div>
-                {uploads.length > 0 ? (
-                  <div className="upload-list">
-                    {uploads.map((upload) => (
-                      <div key={upload.id} className="upload-row">
-                        <div>
-                          <strong>{upload.name}</strong>
-                          <span>
-                            {upload.status === "error"
-                              ? upload.error
-                              : upload.status === "done"
-                                ? "Done"
-                                : `${upload.progress}%`}
-                          </span>
-                        </div>
-                        <div className="upload-progress">
-                          <div style={{ width: `${upload.progress}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="upload-queue-empty">
-                    <p>No uploads in progress right now.</p>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-
           <label className="primary-button upload-button">
             <Icon name="upload" />
             <span>Add files</span>
