@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: drft-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-drft}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - drft_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-drft}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  drft-api:
+    image: dockermaninthehouse/drft-api:${DRFT_IMAGE_TAG:-latest}
+    container_name: drft-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DRFT_APP_ENV: ${DRFT_APP_ENV:-production}
+      DRFT_HTTP_ADDR: :8080
+      DRFT_DB_DSN: ${DRFT_DB_DSN:-postgres://postgres:postgres@postgres:5432/drft?sslmode=disable}
+      DRFT_STORAGE_ROOT: /var/lib/drft/storage
+      DRFT_JWT_SECRET: ${DRFT_JWT_SECRET:?DRFT_JWT_SECRET is required}
+      DRFT_MAX_UPLOAD_SIZE_BYTES: ${DRFT_MAX_UPLOAD_SIZE_BYTES:-1073741824}
+      DRFT_UPLOAD_SESSION_TTL_HOURS: ${DRFT_UPLOAD_SESSION_TTL_HOURS:-24}
+      DRFT_SMTP_HOST: ${DRFT_SMTP_HOST:-}
+      DRFT_SMTP_PORT: ${DRFT_SMTP_PORT:-}
+      DRFT_SMTP_USERNAME: ${DRFT_SMTP_USERNAME:-}
+      DRFT_SMTP_PASSWORD: ${DRFT_SMTP_PASSWORD:-}
+      DRFT_SMTP_FROM_EMAIL: ${DRFT_SMTP_FROM_EMAIL:-}
+      DRFT_SMTP_FROM_NAME: ${DRFT_SMTP_FROM_NAME:-DRFT}
+      DRFT_PASSWORD_RESET_TTL_MINUTES: ${DRFT_PASSWORD_RESET_TTL_MINUTES:-10}
+    ports:
+      - "${DRFT_API_PORT:-8080}:8080"
+    volumes:
+      - drft_storage:/var/lib/drft/storage
+    restart: unless-stopped
+
+  drft-web:
+    image: dockermaninthehouse/drft-web:${DRFT_IMAGE_TAG:-latest}
+    container_name: drft-web
+    depends_on:
+      - drft-api
+    ports:
+      - "${DRFT_WEB_PORT:-3000}:80"
+    restart: unless-stopped
+
+volumes:
+  drft_postgres_data:
+  drft_storage:

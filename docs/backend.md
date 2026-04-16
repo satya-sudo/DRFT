@@ -10,15 +10,15 @@
 
 ## Main backend areas
 
-- `cmd/drft/`
+- `backend/cmd/drft/`
   CLI entrypoint and reset-password command
-- `internal/app/`
+- `backend/internal/app/`
   app wiring and startup
-- `internal/auth/`
+- `backend/internal/auth/`
   auth, roles, tokens, password reset, mailer
-- `internal/media/`
+- `backend/internal/media/`
   upload, metadata extraction, serving, storage stats
-- `migrations/`
+- `backend/migrations/`
   SQL schema changes
 
 ## Current API surface
@@ -135,4 +135,3 @@ Password reset / email:
 - `DRFT_SMTP_FROM_EMAIL`
 - `DRFT_SMTP_FROM_NAME`
 - `DRFT_PASSWORD_RESET_TTL_MINUTES`
-

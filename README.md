@@ -4,7 +4,7 @@ DRFT is a self-hosted photo and video cloud built as a single Go service with Po
 
 Today the repo includes:
 
-- a Go backend with auth, media storage, streaming, and admin management
+- a Go backend in `backend/` with auth, media storage, streaming, and admin management
 - a web client built with React, Vite, JavaScript, and vanilla CSS
 - an Expo-based Android/mobile client for browsing, upload, and viewer flows
 
@@ -55,7 +55,7 @@ cd mobile
 npm run start -- --clear
 ```
 
-Docker full stack:
+Docker full stack, development:
 
 ```bash
 make docker-up
@@ -66,7 +66,8 @@ make docker-up
 
 Note:
 
-- `make docker-up` builds the frontend inside Docker
+- `make docker-up` uses [`docker-compose.dev.yml`](./docker-compose.dev.yml) and builds from source
+- the Go service now lives under [`backend/`](./backend)
 - if your network uses a custom npm registry, proxy, or trusted CA, pass them through Docker build args via environment variables:
   - `DRFT_NPM_REGISTRY`
   - `DRFT_NPM_STRICT_SSL`
@@ -74,6 +75,30 @@ Note:
   - `HTTP_PROXY`
   - `HTTPS_PROXY`
   - `NO_PROXY`
+
+Docker production stack:
+
+```bash
+cp .env.prod.example .env.prod
+make docker-prod-up
+```
+
+- `make docker-prod-up` uses [`docker-compose.prod.yml`](./docker-compose.prod.yml)
+- production compose expects published images:
+  - `dockermaninthehouse/drft-api`
+  - `dockermaninthehouse/drft-web`
+
+Publish images:
+
+```bash
+./scripts/publish-images.sh v0.1.0
+```
+
+This pushes:
+- `dockermaninthehouse/drft-api:v0.1.0`
+- `dockermaninthehouse/drft-web:v0.1.0`
+
+And, by default, also updates `latest`.
 
 ## Current Highlights
 

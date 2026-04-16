@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: drft-postgres
+    environment:
+      POSTGRES_DB: drft
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - drft_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d drft"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  drft-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: drft-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DRFT_APP_ENV: development
+      DRFT_HTTP_ADDR: :8080
+      DRFT_DB_DSN: postgres://postgres:postgres@postgres:5432/drft?sslmode=disable
+      DRFT_STORAGE_ROOT: /var/lib/drft/storage
+      DRFT_JWT_SECRET: change-me
+      DRFT_MAX_UPLOAD_SIZE_BYTES: 1073741824
+      DRFT_UPLOAD_SESSION_TTL_HOURS: 24
+    ports:
+      - "8080:8080"
+    volumes:
+      - drft_storage:/var/lib/drft/storage
+    restart: unless-stopped
+
+  drft-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.web
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        NPM_REGISTRY: ${DRFT_NPM_REGISTRY:-https://registry.npmjs.org/}
+        NPM_STRICT_SSL: ${DRFT_NPM_STRICT_SSL:-true}
+        EXTRA_CA_CERT_BASE64: ${DRFT_EXTRA_CA_CERT_BASE64:-}
+    container_name: drft-web
+    depends_on:
+      - drft-api
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  drft_postgres_data:
+  drft_storage:

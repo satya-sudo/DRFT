@@ -22,6 +22,8 @@ v20.x
 make run
 ```
 
+The Go service source now lives under `backend/`.
+
 ### Frontend
 
 ```bash
