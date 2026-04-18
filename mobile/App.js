@@ -1,4 +1,4 @@
-import { SafeAreaView, StatusBar, StyleSheet, View } from "react-native";
+import { StatusBar, StyleSheet, View } from "react-native";
 import { Text } from "react-native";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { AppProvider, useApp } from "./src/context/AppContext";
@@ -7,7 +7,7 @@ import ServerSetupScreen from "./src/screens/ServerSetupScreen";
 import TimelineScreen from "./src/screens/TimelineScreen";
 
 function AppNavigator() {
-  const { apiBaseUrl, booting, token, user } = useApp();
+  const { apiBaseUrl, booting, serverSetupOpen, token, user } = useApp();
 
   if (booting) {
     return (
@@ -18,7 +18,7 @@ function AppNavigator() {
     );
   }
 
-  if (!apiBaseUrl) {
+  if (!apiBaseUrl || serverSetupOpen) {
     return <ServerSetupScreen />;
   }
 
@@ -28,11 +28,11 @@ function AppNavigator() {
 export default function App() {
   return (
     <AppProvider>
-      <SafeAreaView style={styles.app}>
+      <View style={styles.app}>
         <StatusBar barStyle="light-content" />
         <ExpoStatusBar style="light" />
         <AppNavigator />
-      </SafeAreaView>
+      </View>
     </AppProvider>
   );
 }

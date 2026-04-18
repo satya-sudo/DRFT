@@ -3,7 +3,7 @@ import { Pressable, StatusBar, StyleSheet, Text, TextInput, View } from "react-n
 import { useApp } from "../context/AppContext";
 
 export default function LoginScreen() {
-  const { apiBaseUrl, clearServerConfig, login } = useApp();
+  const { apiBaseUrl, login, openServerSetup } = useApp();
   const [form, setForm] = useState({
     email: "",
     password: ""
@@ -57,7 +57,7 @@ export default function LoginScreen() {
           <Text style={styles.buttonText}>{submitting ? "Signing in..." : "Enter DRFT"}</Text>
         </Pressable>
 
-        <Pressable style={styles.linkButton} onPress={clearServerConfig}>
+        <Pressable style={styles.linkButton} onPress={openServerSetup}>
           <Text style={styles.linkText}>Change server</Text>
         </Pressable>
       </View>

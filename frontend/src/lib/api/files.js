@@ -17,8 +17,11 @@ function parseUploadResponse(value) {
   }
 }
 
-export function listFiles(token) {
-  return requestJSON("/api/v1/files", {
+export function listFiles(token, options = {}) {
+  const limit = options.limit || 40;
+  const offset = options.offset || 0;
+
+  return requestJSON(`/api/v1/files?limit=${limit}&offset=${offset}`, {
     headers: {
       Authorization: `Bearer ${token}`
     }

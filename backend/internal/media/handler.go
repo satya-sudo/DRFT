@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,18 +60,39 @@ func (h *Handler) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	files, err := h.store.ListFilesByUser(r.Context(), user.ID)
+	limit := 40
+	offset := 0
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 200 {
+			limit = parsed
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	page, err := h.store.ListFilesByUser(r.Context(), user.ID, limit, offset)
 	if err != nil {
 		h.serverError(w, err)
 		return
 	}
 
-	items := make([]map[string]any, 0, len(files))
-	for _, file := range files {
+	items := make([]map[string]any, 0, len(page.Files))
+	for _, file := range page.Files {
 		items = append(items, h.serializeFile(file))
 	}
 
-	response.JSON(w, http.StatusOK, map[string]any{"items": items})
+	response.JSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"pagination": map[string]any{
+			"limit":      limit,
+			"offset":     offset,
+			"nextOffset": page.NextOffset,
+			"hasMore":    page.HasMore,
+		},
+	})
 }
 
 func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {

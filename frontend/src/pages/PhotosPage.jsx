@@ -39,8 +39,10 @@ export default function PhotosPage() {
   const { enqueueUploads, localUploadItems, token, uploadActivityKey } = useApp();
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
+  const loadMoreRef = useRef(null);
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState([]);
+  const [pagination, setPagination] = useState({ limit: 40, offset: 0, hasMore: true });
   const [storageStats, setStorageStats] = useState(null);
   const [dropActive, setDropActive] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -49,10 +51,11 @@ export default function PhotosPage() {
   const [viewerPanel, setViewerPanel] = useState("none");
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadFiles();
+    loadFiles({ reset: true });
   }, [token, uploadActivityKey]);
 
   useEffect(() => {
@@ -69,20 +72,82 @@ export default function PhotosPage() {
     folderInputRef.current.setAttribute("directory", "");
   }, []);
 
-  async function loadFiles() {
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || loading || loadingMore || !pagination.hasMore) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
+          loadFiles({ reset: false });
+        }
+      },
+      { rootMargin: "400px 0px" }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loading, loadingMore, pagination.hasMore, pagination.offset, token]);
+
+  async function loadFiles({ reset = false } = {}) {
+    if (!token) {
+      return;
+    }
+
     try {
-      setLoading(true);
-      setError("");
+      if (reset) {
+        setLoading(true);
+        setError("");
+      } else {
+        if (!pagination.hasMore || loadingMore) {
+          return;
+        }
+        setLoadingMore(true);
+      }
+
+      const requestOffset = reset ? 0 : pagination.offset;
       const [filesResponse, statsResponse] = await Promise.all([
-        filesAPI.listFiles(token),
-        filesAPI.getStorageStats(token)
+        filesAPI.listFiles(token, {
+          limit: pagination.limit,
+          offset: requestOffset
+        }),
+        reset ? filesAPI.getStorageStats(token) : Promise.resolve(storageStats)
       ]);
-      setItems(filesResponse.items);
-      setStorageStats(statsResponse);
+
+      setItems((currentValue) => {
+        if (reset) {
+          return filesResponse.items || [];
+        }
+
+        const seen = new Set(currentValue.map((item) => item.id));
+        const nextItems = [...currentValue];
+        (filesResponse.items || []).forEach((item) => {
+          if (!seen.has(item.id)) {
+            nextItems.push(item);
+          }
+        });
+        return nextItems;
+      });
+      setPagination({
+        limit: filesResponse.pagination?.limit || pagination.limit,
+        offset: filesResponse.pagination?.nextOffset || requestOffset,
+        hasMore: Boolean(filesResponse.pagination?.hasMore)
+      });
+
+      if (reset) {
+        setStorageStats(statsResponse);
+      }
     } catch (loadError) {
       setError(loadError.message);
     } finally {
-      setLoading(false);
+      if (reset) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
   }
 
@@ -276,6 +341,14 @@ export default function PhotosPage() {
             </section>
           ))
         : null}
+
+      {!loading && !error ? <div ref={loadMoreRef} style={{ height: 1 }} /> : null}
+      {loadingMore ? (
+        <div className="surface empty-state">
+          <h2>Loading more media</h2>
+          <p>Pulling the next part of your timeline from DRFT.</p>
+        </div>
+      ) : null}
 
       {!loading && !error && orderedGroups.length === 0 ? (
         <div className="surface empty-state">

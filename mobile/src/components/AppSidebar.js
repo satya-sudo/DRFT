@@ -1,12 +1,12 @@
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 const NAV_ITEMS = [
-  { id: "all", label: "Everything" },
-  { id: "image", label: "Images" },
-  { id: "video", label: "Videos" },
-  { id: "albums", label: "Albums" },
-  { id: "tags", label: "Tags" },
-  { id: "settings", label: "Settings" }
+  { id: "all", label: "All", icon: "▦" },
+  { id: "image", label: "Images", icon: "▣" },
+  { id: "video", label: "Videos", icon: "▷" },
+  { id: "albums", label: "Albums", icon: "◫" },
+  { id: "tags", label: "Tags", icon: "#" },
+  { id: "settings", label: "Settings", icon: "⚙" }
 ];
 
 export default function AppSidebar({
@@ -16,6 +16,7 @@ export default function AppSidebar({
   onClose,
   onLogout,
   onChangeServer,
+  serverInfo,
   visible,
   user
 }) {
@@ -41,6 +42,21 @@ export default function AppSidebar({
                   onClose();
                 }}
               >
+                <View
+                  style={[
+                    styles.navIcon,
+                    activeSection === item.id ? styles.navIconActive : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.navIconText,
+                      activeSection === item.id ? styles.navIconTextActive : null
+                    ]}
+                  >
+                    {item.icon}
+                  </Text>
+                </View>
                 <Text
                   style={[
                     styles.navItemText,
@@ -68,6 +84,21 @@ export default function AppSidebar({
                   onClose();
                 }}
               >
+                <View
+                  style={[
+                    styles.navIcon,
+                    activeSection === item.id ? styles.navIconActive : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.navIconText,
+                      activeSection === item.id ? styles.navIconTextActive : null
+                    ]}
+                  >
+                    {item.icon}
+                  </Text>
+                </View>
                 <Text
                   style={[
                     styles.navItemText,
@@ -84,6 +115,11 @@ export default function AppSidebar({
             <View style={styles.serverCard}>
               <Text style={styles.serverLabel}>Connected server</Text>
               <Text style={styles.serverValue}>{apiBaseUrl || "Not set"}</Text>
+              <Text style={styles.serverMeta}>
+                {serverInfo?.version
+                  ? `Backend ${serverInfo.version}${serverInfo?.env ? ` • ${serverInfo.env}` : ""}`
+                  : "Server details unavailable"}
+              </Text>
             </View>
 
             <View style={styles.userCard}>
@@ -149,10 +185,29 @@ const styles = StyleSheet.create({
   navItem: {
     borderRadius: 18,
     paddingHorizontal: 14,
-    paddingVertical: 14
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12
   },
   navItemActive: {
     backgroundColor: "#344055"
+  },
+  navIcon: {
+    width: 22,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  navIconActive: {
+    opacity: 1
+  },
+  navIconText: {
+    color: "#aeb4bb",
+    fontSize: 17,
+    fontWeight: "700"
+  },
+  navIconTextActive: {
+    color: "#f1f3f4"
   },
   navItemText: {
     color: "#c4c8ce",
@@ -183,6 +238,11 @@ const styles = StyleSheet.create({
     color: "#f1f3f4",
     fontSize: 13,
     lineHeight: 18
+  },
+  serverMeta: {
+    color: "#8b9198",
+    fontSize: 12,
+    lineHeight: 17
   },
   userCard: {
     backgroundColor: "#24262a",

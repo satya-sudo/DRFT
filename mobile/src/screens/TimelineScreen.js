@@ -17,6 +17,7 @@ import { useApp } from "../context/AppContext";
 import AppSidebar from "../components/AppSidebar";
 import AuthenticatedImage from "../components/AuthenticatedImage";
 import MediaViewerModal from "../components/MediaViewerModal";
+import UploadQueueModal from "../components/UploadQueueModal";
 import VideoPreviewTile from "../components/VideoPreviewTile";
 import * as filesApi from "../lib/api/files";
 import * as libraryApi from "../lib/api/library";
@@ -73,7 +74,20 @@ function formatAlbumDate(value) {
 }
 
 export default function TimelineScreen() {
-  const { logout, token, user, apiBaseUrl, clearServerConfig } = useApp();
+  const {
+    logout,
+    token,
+    user,
+    apiBaseUrl,
+    openServerSetup,
+    serverInfo,
+    enqueueAssets,
+    retryUpload,
+    uploadQueue,
+    uploadQueueOpen,
+    setUploadQueueOpen,
+    uploadActivityKey
+  } = useApp();
   const { width } = useWindowDimensions();
   const [items, setItems] = useState([]);
   const [albums, setAlbums] = useState([]);
@@ -86,8 +100,12 @@ export default function TimelineScreen() {
   const [tagForm, setTagForm] = useState({ name: "", color: TAG_COLORS[0] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadLabel, setUploadLabel] = useState("");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [filePagination, setFilePagination] = useState({
+    limit: 40,
+    offset: 0,
+    hasMore: true
+  });
   const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -96,6 +114,23 @@ export default function TimelineScreen() {
   useEffect(() => {
     initializeScreen();
   }, [token]);
+
+  useEffect(() => {
+    if (!token || uploadActivityKey === 0) {
+      return;
+    }
+
+    loadFiles(true, { reset: true }).catch(() => {});
+    loadCollections().catch(() => {});
+
+    if (selectedAlbumID) {
+      loadAlbumDetail(selectedAlbumID);
+    }
+
+    if (selectedTagID) {
+      loadTagDetail(selectedTagID);
+    }
+  }, [token, uploadActivityKey]);
 
   useEffect(() => {
     if (albums.length && (!selectedAlbumID || !albums.some((album) => album.id === selectedAlbumID))) {
@@ -137,7 +172,7 @@ export default function TimelineScreen() {
     try {
       setLoading(true);
       setError("");
-      await Promise.all([loadFiles(true), loadCollections()]);
+      await Promise.all([loadFiles(true, { reset: true }), loadCollections()]);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -145,19 +180,57 @@ export default function TimelineScreen() {
     }
   }
 
-  async function loadFiles(isInitial = false) {
+  async function loadFiles(isInitial = false, options = {}) {
+    const reset = Boolean(options.reset);
+
     try {
       if (!isInitial) {
-        setRefreshing(true);
+        if (reset) {
+          setRefreshing(true);
+        } else {
+          if (!filePagination.hasMore || loadingMore) {
+            return;
+          }
+          setLoadingMore(true);
+        }
       }
       setError("");
-      const response = await filesApi.listFiles(token);
-      setItems(response.items || []);
+      const requestOffset = reset ? 0 : filePagination.offset;
+      const response = await filesApi.listFiles(token, {
+        limit: filePagination.limit,
+        offset: requestOffset
+      });
+
+      setItems((currentValue) => {
+        if (reset) {
+          return response.items || [];
+        }
+
+        const seen = new Set(currentValue.map((item) => item.id));
+        const nextItems = [...currentValue];
+        (response.items || []).forEach((item) => {
+          if (!seen.has(item.id)) {
+            nextItems.push(item);
+          }
+        });
+        return nextItems;
+      });
+      setFilePagination({
+        limit: response.pagination?.limit || filePagination.limit,
+        offset: response.pagination?.nextOffset || requestOffset,
+        hasMore: Boolean(response.pagination?.hasMore)
+      });
     } catch (loadError) {
       setError(loadError.message);
       throw loadError;
     } finally {
-      setRefreshing(false);
+      if (!isInitial) {
+        if (reset) {
+          setRefreshing(false);
+        } else {
+          setLoadingMore(false);
+        }
+      }
     }
   }
 
@@ -208,7 +281,7 @@ export default function TimelineScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsMultipleSelection: true,
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ["images", "videos"],
       quality: 1
     });
 
@@ -217,39 +290,26 @@ export default function TimelineScreen() {
     }
 
     try {
-      setUploading(true);
       setError("");
-
-      for (const asset of result.assets) {
-        setUploadLabel(asset.fileName || asset.uri.split("/").pop() || "Uploading");
-        await filesApi.uploadAssetWithProgress(token, asset);
-      }
-
-      await Promise.all([loadFiles(true), loadCollections()]);
-      if (selectedAlbumID) {
-        await loadAlbumDetail(selectedAlbumID);
-      }
-      if (selectedTagID) {
-        await loadTagDetail(selectedTagID);
-      }
+      setUploadQueueOpen(true);
+      enqueueAssets(result.assets).catch((uploadError) => {
+        setError(uploadError.message);
+      });
     } catch (uploadError) {
       setError(uploadError.message);
-    } finally {
-      setUploading(false);
-      setUploadLabel("");
     }
   }
 
   async function handleChangeServer() {
     setSidebarOpen(false);
-    await clearServerConfig();
+    openServerSetup();
   }
 
   async function handleDeleteItem(itemToDelete) {
     try {
       await filesApi.deleteFile(token, itemToDelete.id);
       setSelectedItem(null);
-      await Promise.all([loadFiles(true), loadCollections()]);
+      await Promise.all([loadFiles(true, { reset: true }), loadCollections()]);
       if (selectedAlbumID) {
         await loadAlbumDetail(selectedAlbumID);
       }
@@ -457,6 +517,15 @@ export default function TimelineScreen() {
   );
   const selectedItemIDs = new Set(selectedCollectionItems.map((item) => item.id));
   const suggestedFiles = items.filter((item) => !selectedItemIDs.has(item.id)).slice(0, 15);
+  const activeUploadCount = uploadQueue.filter(
+    (entry) => entry.status === "uploading" || entry.status === "retrying"
+  ).length;
+  const totalQueuedCount = uploadQueue.length;
+  const uploadSubtitle = activeUploadCount > 0
+    ? `${activeUploadCount} active upload${activeUploadCount === 1 ? "" : "s"}`
+    : totalQueuedCount > 0
+      ? `${totalQueuedCount} recent transfer${totalQueuedCount === 1 ? "" : "s"}`
+      : "";
 
   function renderGridRow(row) {
     return (
@@ -474,6 +543,7 @@ export default function TimelineScreen() {
                 <VideoPreviewTile item={entry} token={token} />
               ) : (
                 <AuthenticatedImage
+                  allowDownloadFallback={!entry.previewUrl}
                   downloadPath={entry.downloadUrl}
                   previewPath={entry.previewUrl}
                   style={styles.image}
@@ -521,7 +591,7 @@ export default function TimelineScreen() {
 
   function renderHeader() {
     const titleMap = {
-      all: "Everything",
+      all: "All",
       image: "Images",
       video: "Videos",
       albums: "Albums",
@@ -540,8 +610,8 @@ export default function TimelineScreen() {
       subtitle = selectedTag
         ? `${selectedTag.fileCount} file${selectedTag.fileCount === 1 ? "" : "s"} tagged ${selectedTag.name}`
         : "Use personal labels across albums and dates";
-    } else if (uploading) {
-      subtitle = uploadLabel || "Uploading into DRFT";
+    } else if (uploadSubtitle) {
+      subtitle = uploadSubtitle;
     }
 
     return (
@@ -556,11 +626,22 @@ export default function TimelineScreen() {
           <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
 
-        {activeSection !== "settings" ? (
-          <Pressable style={styles.primaryButton} onPress={handlePickMedia}>
-            <Text style={styles.primaryButtonText}>{uploading ? "Uploading..." : "Upload"}</Text>
+        <View style={styles.topbarActions}>
+          <Pressable
+            style={styles.secondaryHeaderButton}
+            onPress={() => setUploadQueueOpen(true)}
+          >
+            <Text style={styles.secondaryHeaderButtonText}>
+              Queue{totalQueuedCount ? ` ${totalQueuedCount}` : ""}
+            </Text>
           </Pressable>
-        ) : null}
+
+          {activeSection !== "settings" ? (
+            <Pressable style={styles.primaryButton} onPress={handlePickMedia}>
+              <Text style={styles.primaryButtonText}>Upload</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     );
   }
@@ -586,6 +667,11 @@ export default function TimelineScreen() {
         <View style={styles.settingsCard}>
           <Text style={styles.settingsEyebrow}>Server</Text>
           <Text style={styles.serverValue}>{apiBaseUrl}</Text>
+          <Text style={styles.settingsText}>
+            {serverInfo?.version
+              ? `Backend ${serverInfo.version}${serverInfo?.env ? ` • ${serverInfo.env}` : ""}`
+              : "Server details unavailable"}
+          </Text>
           <View style={styles.settingsActions}>
             <Pressable style={styles.secondaryButton} onPress={handleChangeServer}>
               <Text style={styles.secondaryButtonText}>Change server</Text>
@@ -824,6 +910,7 @@ export default function TimelineScreen() {
         onClose={() => setSidebarOpen(false)}
         onLogout={logout}
         onChangeServer={handleChangeServer}
+        serverInfo={serverInfo}
         visible={sidebarOpen}
         user={user}
       />
@@ -846,7 +933,7 @@ export default function TimelineScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => initializeScreen()}
+              onRefresh={() => loadFiles(false, { reset: true })}
               tintColor="#8ab4f8"
             />
           }
@@ -858,6 +945,8 @@ export default function TimelineScreen() {
             </View>
           )}
           renderItem={({ item: row }) => renderGridRow(row)}
+          onEndReached={() => loadFiles(false, { reset: false })}
+          onEndReachedThreshold={0.5}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No media yet</Text>
@@ -866,8 +955,22 @@ export default function TimelineScreen() {
               </Text>
             </View>
           }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.feedFooter}>
+                <Text style={styles.feedFooterText}>Loading more media...</Text>
+              </View>
+            ) : null
+          }
         />
       ) : null}
+
+      <UploadQueueModal
+        visible={uploadQueueOpen}
+        queue={uploadQueue}
+        onRetry={retryUpload}
+        onClose={() => setUploadQueueOpen(false)}
+      />
 
       <MediaViewerModal
         items={viewerItems}
@@ -941,6 +1044,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18
   },
+  topbarActions: {
+    alignItems: "flex-end",
+    gap: 8,
+    marginTop: 2
+  },
+  secondaryHeaderButton: {
+    backgroundColor: "#26282d",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 11
+  },
+  secondaryHeaderButtonText: {
+    color: "#f1f3f4",
+    fontSize: 14,
+    fontWeight: "700"
+  },
   primaryButton: {
     backgroundColor: "#8ab4f8",
     borderRadius: 18,
@@ -979,6 +1098,15 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 28
+  },
+  feedFooter: {
+    paddingTop: 8,
+    paddingBottom: 22,
+    alignItems: "center"
+  },
+  feedFooterText: {
+    color: "#aeb4bb",
+    fontSize: 14
   },
   scrollContent: {
     paddingBottom: 28,

@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
 import { buildAuthenticatedMediaURL } from "../lib/config";
 
 export default function AuthenticatedImage({
+  allowDownloadFallback = false,
   downloadPath,
   previewPath,
   resizeMode = "cover",
@@ -18,7 +19,7 @@ export default function AuthenticatedImage({
       });
     }
 
-    if (downloadPath) {
+    if (allowDownloadFallback && downloadPath) {
       items.push({
         uri: buildAuthenticatedMediaURL(downloadPath, token)
       });

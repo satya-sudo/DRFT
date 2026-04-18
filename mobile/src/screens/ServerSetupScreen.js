@@ -20,8 +20,8 @@ function ensureScheme(value) {
 }
 
 export default function ServerSetupScreen() {
-  const { configureServer } = useApp();
-  const [input, setInput] = useState(getSuggestedApiBaseUrl());
+  const { apiBaseUrl, closeServerSetup, configureServer } = useApp();
+  const [input, setInput] = useState(apiBaseUrl || getSuggestedApiBaseUrl());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -78,6 +78,10 @@ export default function ServerSetupScreen() {
           Example: {normalizedExample || getSuggestedApiBaseUrl() || "http://192.168.1.109:8080"}
         </Text>
 
+        {apiBaseUrl ? (
+          <Text style={styles.helper}>Saved server: {apiBaseUrl}</Text>
+        ) : null}
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {success ? <Text style={styles.success}>{success}</Text> : null}
 
@@ -86,6 +90,12 @@ export default function ServerSetupScreen() {
             {submitting ? "Checking server..." : "Use this server"}
           </Text>
         </Pressable>
+
+        {apiBaseUrl ? (
+          <Pressable style={styles.linkButton} onPress={closeServerSetup}>
+            <Text style={styles.linkText}>Keep current server</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -150,5 +160,14 @@ const styles = StyleSheet.create({
     color: "#111318",
     fontSize: 16,
     fontWeight: "700"
+  },
+  linkButton: {
+    alignItems: "center",
+    paddingVertical: 4
+  },
+  linkText: {
+    color: "#8ab4f8",
+    fontSize: 14,
+    fontWeight: "600"
   }
 });

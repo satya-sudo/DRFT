@@ -190,14 +190,14 @@ func (h *Handler) respondWithAlbum(w http.ResponseWriter, r *http.Request, userI
 		h.serverError(w, err)
 		return
 	}
-	files, err := h.media.ListFilesByUser(r.Context(), userID)
+	filePage, err := h.media.ListFilesByUser(r.Context(), userID, 10000, 0)
 	if err != nil {
 		h.serverError(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, map[string]any{
 		"album": serializeAlbum(album),
-		"items": filterSerializedFiles(files, fileIDs),
+		"items": filterSerializedFiles(filePage.Files, fileIDs),
 	})
 }
 
@@ -265,14 +265,14 @@ func (h *Handler) handleTagByID(w http.ResponseWriter, r *http.Request) {
 			h.serverError(w, err)
 			return
 		}
-		files, err := h.media.ListFilesByUser(r.Context(), user.ID)
+		filePage, err := h.media.ListFilesByUser(r.Context(), user.ID, 10000, 0)
 		if err != nil {
 			h.serverError(w, err)
 			return
 		}
 		response.JSON(w, http.StatusOK, map[string]any{
 			"tag":   serializeTag(tag),
-			"items": filterSerializedFiles(files, fileIDs),
+			"items": filterSerializedFiles(filePage.Files, fileIDs),
 		})
 	case http.MethodPatch:
 		var payload struct {

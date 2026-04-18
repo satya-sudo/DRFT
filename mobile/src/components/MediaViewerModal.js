@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 import { File, Paths } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
 import { VideoView, useVideoPlayer } from "expo-video";
+import AuthenticatedImage from "./AuthenticatedImage";
 import { buildAuthenticatedMediaURL } from "../lib/config";
 
 function formatTakenAt(value) {
@@ -41,18 +41,22 @@ function fileExtensionFor(item) {
   return item?.mediaType === "video" ? "mp4" : "jpg";
 }
 
-function ViewerSlide({ item, token }) {
+function ViewerSlide({ active, item, token }) {
   const mediaSource = useMemo(
     () => ({
       uri: buildAuthenticatedMediaURL(item.downloadUrl || item.previewUrl, token)
     }),
-    [item.downloadUrl, item.mediaType, item.previewUrl, token]
+    [item.downloadUrl, item.previewUrl, token]
   );
 
-  const player = useVideoPlayer(item.mediaType === "video" ? mediaSource : null, (videoPlayer) => {
+  const player = useVideoPlayer(active && item.mediaType === "video" ? mediaSource : null, (videoPlayer) => {
     videoPlayer.loop = false;
     videoPlayer.play();
   });
+
+  if (!active) {
+    return <View style={styles.slide} />;
+  }
 
   if (item.mediaType === "video") {
     return (
@@ -62,7 +66,6 @@ function ViewerSlide({ item, token }) {
           style={styles.viewerMedia}
           contentFit="contain"
           nativeControls
-          allowsFullscreen
         />
       </View>
     );
@@ -70,7 +73,14 @@ function ViewerSlide({ item, token }) {
 
   return (
     <View style={styles.slide}>
-      <Image source={mediaSource} style={styles.viewerMedia} resizeMode="contain" />
+      <AuthenticatedImage
+        allowDownloadFallback
+        downloadPath={item.downloadUrl}
+        previewPath={item.previewUrl}
+        resizeMode="contain"
+        style={styles.viewerMedia}
+        token={token}
+      />
     </View>
   );
 }
@@ -209,9 +219,9 @@ export default function MediaViewerModal({
             index
           })}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <View style={{ width, height }}>
-              <ViewerSlide item={item} token={token} />
+              <ViewerSlide active={currentIndex === index} item={item} token={token} />
             </View>
           )}
           onMomentumScrollEnd={(event) => {

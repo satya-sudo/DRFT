@@ -15,6 +15,7 @@ import {
   persistApiBaseUrl,
   setRuntimeApiBaseUrl
 } from "../lib/config";
+import { useUploadManager } from "./useUploadManager";
 
 const AppContext = createContext(null);
 
@@ -23,6 +24,9 @@ export function AppProvider({ children }) {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [token, setToken] = useState(null);
   const [user, setUser] = useState(null);
+  const [serverInfo, setServerInfo] = useState(null);
+  const [serverSetupOpen, setServerSetupOpen] = useState(false);
+  const uploadManager = useUploadManager(token);
 
   useEffect(() => {
     initializeApp();
@@ -38,6 +42,9 @@ export function AppProvider({ children }) {
         setBooting(false);
         return;
       }
+
+      const health = await systemApi.checkServer(storedApiBaseUrl);
+      setServerInfo(health);
 
       const storedToken = await getStoredSessionToken();
       const storedUser = await getStoredSessionUser();
@@ -60,6 +67,7 @@ export function AppProvider({ children }) {
         setToken(null);
         setUser(null);
       }
+      setServerInfo(null);
     } finally {
       setBooting(false);
     }
@@ -85,7 +93,26 @@ export function AppProvider({ children }) {
     const response = await systemApi.checkServer(nextApiBaseUrl);
     const persisted = await persistApiBaseUrl(nextApiBaseUrl);
     setApiBaseUrl(persisted);
+    setRuntimeApiBaseUrl(persisted);
+    setServerInfo(response);
+    setServerSetupOpen(false);
     return response;
+  }
+
+  async function refreshServerInfo() {
+    if (!apiBaseUrl) {
+      setServerInfo(null);
+      return null;
+    }
+
+    try {
+      const response = await systemApi.checkServer(apiBaseUrl);
+      setServerInfo(response);
+      return response;
+    } catch (error) {
+      setServerInfo(null);
+      throw error;
+    }
   }
 
   async function clearServerConfig() {
@@ -95,6 +122,16 @@ export function AppProvider({ children }) {
     setApiBaseUrl("");
     setToken(null);
     setUser(null);
+    setServerInfo(null);
+    setServerSetupOpen(false);
+  }
+
+  function openServerSetup() {
+    setServerSetupOpen(true);
+  }
+
+  function closeServerSetup() {
+    setServerSetupOpen(false);
   }
 
   return (
@@ -104,10 +141,16 @@ export function AppProvider({ children }) {
         apiBaseUrl,
         token,
         user,
+        serverInfo,
+        serverSetupOpen,
         login,
         logout,
         configureServer,
-        clearServerConfig
+        clearServerConfig,
+        openServerSetup,
+        closeServerSetup,
+        refreshServerInfo,
+        ...uploadManager
       }}
     >
       {children}

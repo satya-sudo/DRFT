@@ -49,11 +49,24 @@ type Store struct {
 	db *sql.DB
 }
 
+type FilePage struct {
+	Files      []File
+	HasMore    bool
+	NextOffset int
+}
+
 func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-func (s *Store) ListFilesByUser(ctx context.Context, userID string) ([]File, error) {
+func (s *Store) ListFilesByUser(ctx context.Context, userID string, limit, offset int) (FilePage, error) {
+	if limit <= 0 {
+		limit = 40
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, user_id, file_name, original_extension, storage_key, mime_type, size_bytes,
 		       media_type, checksum_sha256, width_px, height_px, duration_ms, thumbnail_key,
@@ -61,13 +74,14 @@ func (s *Store) ListFilesByUser(ctx context.Context, userID string) ([]File, err
 		FROM files
 		WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY COALESCE(taken_at, created_at) DESC, id DESC
-	`, userID)
+		LIMIT $2 OFFSET $3
+	`, userID, limit+1, offset)
 	if err != nil {
-		return nil, fmt.Errorf("list files: %w", err)
+		return FilePage{}, fmt.Errorf("list files: %w", err)
 	}
 	defer rows.Close()
 
-	files := make([]File, 0)
+	files := make([]File, 0, limit+1)
 	for rows.Next() {
 		var file File
 		if err := rows.Scan(
@@ -88,17 +102,26 @@ func (s *Store) ListFilesByUser(ctx context.Context, userID string) ([]File, err
 			&file.TakenAt,
 			&file.DeletedAt,
 		); err != nil {
-			return nil, fmt.Errorf("scan file: %w", err)
+			return FilePage{}, fmt.Errorf("scan file: %w", err)
 		}
 
 		files = append(files, file)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate files: %w", err)
+		return FilePage{}, fmt.Errorf("iterate files: %w", err)
 	}
 
-	return files, nil
+	hasMore := len(files) > limit
+	if hasMore {
+		files = files[:limit]
+	}
+
+	return FilePage{
+		Files:      files,
+		HasMore:    hasMore,
+		NextOffset: offset + len(files),
+	}, nil
 }
 
 func (s *Store) CreateFile(ctx context.Context, input CreateFileInput) (File, error) {
