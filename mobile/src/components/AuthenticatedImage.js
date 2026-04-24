@@ -58,6 +58,7 @@ export default function AuthenticatedImage({
           setLoading(false);
         }}
         onError={() => {
+          console.warn("[DRFT media] image load failed", source?.uri);
           if (sourceIndex < sources.length - 1) {
             setSourceIndex((current) => current + 1);
             return;

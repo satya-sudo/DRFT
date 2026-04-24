@@ -47,8 +47,13 @@ export default function UploadQueueModal({ onClose, onRetry, queue, visible }) {
                         ? entry.error || "Upload failed"
                         : entry.status === "done"
                           ? "Uploaded to DRFT"
-                          : `${formatBytes(entry.sizeBytes)} in progress`}
+                          : entry.detail || `${formatBytes(entry.sizeBytes)} in progress`}
                   </Text>
+                  {entry.mode ? (
+                    <Text style={styles.itemHint}>
+                      {entry.mode === "chunked" ? "Chunked upload" : "Direct upload"}
+                    </Text>
+                  ) : null}
                   <View style={styles.progressTrack}>
                     <View
                       style={[
@@ -160,6 +165,11 @@ const styles = StyleSheet.create({
     color: "#aeb4bb",
     fontSize: 15,
     lineHeight: 21
+  },
+  itemHint: {
+    color: "#7f858d",
+    fontSize: 12,
+    fontWeight: "600"
   },
   progressTrack: {
     height: 6,

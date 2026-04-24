@@ -6,6 +6,16 @@ const defaultChunkTimeoutMs = 120000;
 const chunkRetryLimit = 3;
 const chunkRetryDelayMs = 1000;
 
+function notifyStatus(callback, status) {
+  if (typeof callback === "function") {
+    callback(status);
+  }
+
+  if (status?.message) {
+    console.info("[DRFT upload]", status.message);
+  }
+}
+
 function clampProgress(value) {
   if (!Number.isFinite(value)) {
     return 0;
@@ -135,10 +145,20 @@ async function uploadChunkWithRetry({
 }
 
 async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
+  notifyStatus(options.onStatus, {
+    mode: "chunked",
+    phase: "prepare",
+    message: "Using chunked upload"
+  });
   const blob = await getAssetBlob(asset);
   const fileName = asset.fileName || asset.name || `upload-${Date.now()}.jpg`;
   const mimeType = asset.mimeType || asset.type || blob.type || "application/octet-stream";
   const sizeBytes = asset.fileSize || blob.size;
+  notifyStatus(options.onStatus, {
+    mode: "chunked",
+    phase: "init",
+    message: "Creating upload session"
+  });
   const session = await requestChunkedJSON("/api/v1/uploads/init", {
     method: "POST",
     headers: {
@@ -162,6 +182,11 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
       const end = Math.min(start + chunkSize, sizeBytes);
       const chunk = blob.slice(start, end, mimeType);
 
+      notifyStatus(options.onStatus, {
+        mode: "chunked",
+        phase: "chunk",
+        message: `Uploading chunk ${index + 1} of ${totalChunks}`
+      });
       await uploadChunkWithRetry({
         token,
         uploadId: session.uploadId,
@@ -176,6 +201,11 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
       }
     }
 
+    notifyStatus(options.onStatus, {
+      mode: "chunked",
+      phase: "finalize",
+      message: "Finalizing upload"
+    });
     return requestChunkedJSON(`/api/v1/uploads/${session.uploadId}/complete`, {
       method: "POST",
       headers: {
@@ -195,8 +225,19 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
 
 export function uploadAssetWithProgress(token, asset, onProgress, options = {}) {
   if (shouldUseChunkedUpload(asset)) {
+    notifyStatus(options.onStatus, {
+      mode: "chunked",
+      phase: "selected",
+      message: "Selected chunked upload path"
+    });
     return uploadAssetInChunks(token, asset, onProgress, options);
   }
+
+  notifyStatus(options.onStatus, {
+    mode: "direct",
+    phase: "selected",
+    message: "Selected direct upload path"
+  });
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -209,6 +250,11 @@ export function uploadAssetWithProgress(token, asset, onProgress, options = {}) 
 
     request.open("POST", buildAPIURL("/api/v1/upload"));
     request.setRequestHeader("Authorization", `Bearer ${token}`);
+    notifyStatus(options.onStatus, {
+      mode: "direct",
+      phase: "upload",
+      message: "Uploading file directly"
+    });
 
     request.upload.addEventListener("progress", (event) => {
       if (!event.lengthComputable || typeof onProgress !== "function") {

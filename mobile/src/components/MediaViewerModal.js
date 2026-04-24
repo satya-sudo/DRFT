@@ -42,11 +42,27 @@ function fileExtensionFor(item) {
 }
 
 function ViewerSlide({ active, item, token }) {
+  const mediaPath =
+    item.mediaType === "video"
+      ? item.downloadUrl
+      : item.downloadUrl || item.previewUrl;
+
+  useEffect(() => {
+    if (!active || !mediaPath) {
+      return;
+    }
+
+    console.info("[DRFT media] opening viewer source", {
+      mediaType: item.mediaType,
+      mediaPath
+    });
+  }, [active, item.mediaType, mediaPath]);
+
   const mediaSource = useMemo(
     () => ({
-      uri: buildAuthenticatedMediaURL(item.downloadUrl || item.previewUrl, token)
+      uri: buildAuthenticatedMediaURL(mediaPath, token)
     }),
-    [item.downloadUrl, item.previewUrl, token]
+    [mediaPath, token]
   );
 
   const player = useVideoPlayer(active && item.mediaType === "video" ? mediaSource : null, (videoPlayer) => {
@@ -66,6 +82,7 @@ function ViewerSlide({ active, item, token }) {
           style={styles.viewerMedia}
           contentFit="contain"
           nativeControls
+          surfaceType="textureView"
         />
       </View>
     );
