@@ -8,7 +8,7 @@ function isDataURL(value) {
   return typeof value === "string" && value.startsWith("data:");
 }
 
-function buildProtectedMediaURL(src, token) {
+export function buildProtectedMediaURL(src, token) {
   if (!src || isObjectURL(src) || isDataURL(src)) {
     return src || "";
   }

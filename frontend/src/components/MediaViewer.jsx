@@ -1,6 +1,6 @@
 import { useApp } from "../context/AppContext";
 import { Icon } from "./Icons";
-import ProtectedMedia from "./ProtectedMedia";
+import ProtectedMedia, { buildProtectedMediaURL } from "./ProtectedMedia";
 
 function formatBytes(sizeBytes) {
   if (!sizeBytes) {
@@ -42,6 +42,7 @@ export default function MediaViewer({
   }
 
   const mediaSource = item.downloadUrl || item.previewUrl;
+  const downloadSource = buildProtectedMediaURL(mediaSource, token);
 
   return (
     <div className="viewer-backdrop" onClick={onClose}>
@@ -55,7 +56,7 @@ export default function MediaViewer({
           </button>
           <div className="viewer-toolbar-actions">
             {!item.localOnly ? (
-              <a className="ghost-button" href={mediaSource} download target="_blank" rel="noreferrer">
+              <a className="ghost-button" href={downloadSource} download={item.fileName}>
                 <Icon name="download" />
                 <span>Download</span>
               </a>
