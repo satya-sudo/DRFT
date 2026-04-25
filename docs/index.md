@@ -13,6 +13,7 @@ This documentation captures:
 ## Documentation
 
 - [Current status](./status.md)
+- [v0.1.0 release checklist](./release-v0.1.0.md)
 - [Architecture](./architecture.md)
 - [Backend and API](./backend.md)
 - [Frontend and UX](./frontend.md)
@@ -52,4 +53,3 @@ Suggested repo settings:
 2. Go to `Pages`.
 3. Set source to `Deploy from a branch`.
 4. Choose your default branch and `/docs` as the folder.
-

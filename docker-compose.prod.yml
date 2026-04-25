@@ -12,7 +12,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-drft}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 15s
     restart: unless-stopped
 
   drft-api:
@@ -40,13 +41,20 @@ services:
       - "${DRFT_API_PORT:-8080}:8080"
     volumes:
       - drft_storage:/var/lib/drft/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   drft-web:
     image: dockermaninthehouse/drft-web:${DRFT_IMAGE_TAG:-latest}
     container_name: drft-web
     depends_on:
-      - drft-api
+      drft-api:
+        condition: service_healthy
     ports:
       - "${DRFT_WEB_PORT:-3000}:80"
     restart: unless-stopped

@@ -15,6 +15,7 @@ Full project documentation lives in [`docs/`](./docs/index.md).
 Start here:
 
 - [Docs home](./docs/index.md)
+- [v0.1.0 release checklist](./docs/release-v0.1.0.md)
 - [Current status](./docs/status.md)
 - [Architecture](./docs/architecture.md)
 - [Backend and API](./docs/backend.md)
