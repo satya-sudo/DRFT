@@ -43,6 +43,7 @@ export default function MediaViewer({
 
   const mediaSource = item.downloadUrl || item.previewUrl;
   const downloadSource = buildProtectedMediaURL(mediaSource, token);
+  const downloadName = item.downloadName || item.fileName;
 
   return (
     <div className="viewer-backdrop" onClick={onClose}>
@@ -56,7 +57,7 @@ export default function MediaViewer({
           </button>
           <div className="viewer-toolbar-actions">
             {!item.localOnly ? (
-              <a className="ghost-button" href={downloadSource} download={item.fileName}>
+              <a className="ghost-button" href={downloadSource} download={downloadName}>
                 <Icon name="download" />
                 <span>Download</span>
               </a>

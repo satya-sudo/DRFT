@@ -441,6 +441,7 @@ func serializeMediaFile(file media.File) map[string]any {
 	return map[string]any{
 		"id":          file.ID,
 		"fileName":    file.FileName,
+		"downloadName": buildLibraryDownloadName(file),
 		"mediaType":   file.MediaType,
 		"mimeType":    file.MIMEType,
 		"sizeBytes":   file.SizeBytes,
@@ -452,6 +453,13 @@ func serializeMediaFile(file media.File) map[string]any {
 		"previewUrl":  "/api/v1/file/" + file.ID + "?variant=preview",
 		"downloadUrl": "/api/v1/file/" + file.ID,
 	}
+}
+
+func buildLibraryDownloadName(file media.File) string {
+	if strings.TrimSpace(file.OriginalExtension) == "" {
+		return file.FileName
+	}
+	return file.FileName + "." + strings.TrimPrefix(file.OriginalExtension, ".")
 }
 
 func nullableString(value sql.NullString) any {

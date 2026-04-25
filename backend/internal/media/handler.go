@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -432,6 +433,7 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, file File) {
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "private, max-age=60")
+	w.Header().Set("Content-Disposition", contentDisposition(fileName))
 	http.ServeContent(w, r, fileName, info.ModTime(), handle)
 }
 
@@ -468,6 +470,7 @@ func (h *Handler) serializeFile(file File) map[string]any {
 	return map[string]any{
 		"id":          file.ID,
 		"fileName":    file.FileName,
+		"downloadName": buildDownloadName(file),
 		"mediaType":   file.MediaType,
 		"mimeType":    file.MIMEType,
 		"sizeBytes":   file.SizeBytes,
@@ -479,6 +482,18 @@ func (h *Handler) serializeFile(file File) map[string]any {
 		"previewUrl":  fmt.Sprintf("/api/v1/file/%s?variant=preview", file.ID),
 		"downloadUrl": fmt.Sprintf("/api/v1/file/%s", file.ID),
 	}
+}
+
+func buildDownloadName(file File) string {
+	if strings.TrimSpace(file.OriginalExtension) == "" {
+		return file.FileName
+	}
+	return file.FileName + "." + strings.TrimPrefix(file.OriginalExtension, ".")
+}
+
+func contentDisposition(fileName string) string {
+	escaped := strings.NewReplacer("\\", "\\\\", "\"", "\\\"").Replace(fileName)
+	return fmt.Sprintf("%s; filename=\"%s\"", mime.FormatMediaType("attachment", map[string]string{"filename": fileName}), escaped)
 }
 
 func (h *Handler) ingestMedia(ctx context.Context, userID, originalFileName string, takenAt *time.Time, source io.Reader) (File, error) {
