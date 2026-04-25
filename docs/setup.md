@@ -103,6 +103,43 @@ Required GitHub repository secrets:
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
 
+### Production data paths and backups
+
+For production, DRFT now uses explicit host paths from `.env.prod` instead of opaque Docker volumes:
+
+- `DRFT_POSTGRES_DATA_PATH`
+- `DRFT_STORAGE_PATH`
+- `DRFT_BACKUPS_PATH`
+
+Recommended flow:
+
+1. Copy `.env.prod.example` to `.env.prod`
+2. Set real host paths for database, storage, and backups
+3. Start the prod stack
+
+Automatic backup:
+
+- `drft-backup` runs inside `docker-compose.prod.yml`
+- it writes timestamped backups under `DRFT_BACKUPS_PATH`
+- each backup includes:
+  - `postgres.dump`
+  - `storage.tar.gz`
+  - `manifest.txt`
+  - `SHA256SUMS`
+
+Backup settings:
+
+- `DRFT_BACKUP_INTERVAL_HOURS`
+- `DRFT_BACKUP_RETENTION_DAYS`
+- `DRFT_BACKUP_RUN_ON_START`
+
+Manual commands:
+
+```bash
+sh ./scripts/backup-prod-now.sh
+sh ./scripts/restore-prod-backup.sh ./backups/<timestamp>
+```
+
 ## First admin setup
 
 1. Start backend and frontend.

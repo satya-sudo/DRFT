@@ -88,6 +88,10 @@ make docker-prod-up
 - production compose expects published images:
   - `dockermaninthehouse/drft-api`
   - `dockermaninthehouse/drft-web`
+- production data is stored on explicit host paths from `.env.prod`:
+  - `DRFT_POSTGRES_DATA_PATH`
+  - `DRFT_STORAGE_PATH`
+  - `DRFT_BACKUPS_PATH`
 
 Publish images:
 
@@ -109,6 +113,21 @@ GitHub Actions image publishing:
 - required GitHub repository secrets:
   - `DOCKERHUB_USERNAME`
   - `DOCKERHUB_TOKEN`
+
+Production backup and restore:
+
+- automatic backup service is included in [`docker-compose.prod.yml`](./docker-compose.prod.yml)
+- manual backup now:
+
+```bash
+sh ./scripts/backup-prod-now.sh
+```
+
+- manual restore from a backup directory:
+
+```bash
+sh ./scripts/restore-prod-backup.sh ./backups/<timestamp>
+```
 
 ## Current Highlights
 

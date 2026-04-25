@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
-      - drft_postgres_data:/var/lib/postgresql/data
+      - ${DRFT_POSTGRES_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-drft}"]
       interval: 5s
@@ -40,7 +40,7 @@ services:
     ports:
       - "${DRFT_API_PORT:-8080}:8080"
     volumes:
-      - drft_storage:/var/lib/drft/storage
+      - ${DRFT_STORAGE_PATH:-./data/storage}:/var/lib/drft/storage
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
@@ -59,6 +59,25 @@ services:
       - "${DRFT_WEB_PORT:-3000}:80"
     restart: unless-stopped
 
-volumes:
-  drft_postgres_data:
-  drft_storage:
+  drft-backup:
+    image: postgres:16-alpine
+    container_name: drft-backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-drft}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      BACKUP_ROOT: /backups
+      STORAGE_ROOT: /var/lib/drft/storage
+      DRFT_BACKUP_INTERVAL_HOURS: ${DRFT_BACKUP_INTERVAL_HOURS:-24}
+      DRFT_BACKUP_RETENTION_DAYS: ${DRFT_BACKUP_RETENTION_DAYS:-7}
+      DRFT_BACKUP_RUN_ON_START: ${DRFT_BACKUP_RUN_ON_START:-true}
+    volumes:
+      - ${DRFT_STORAGE_PATH:-./data/storage}:/var/lib/drft/storage:ro
+      - ${DRFT_BACKUPS_PATH:-./backups}:/backups
+      - ./scripts:/opt/drft-scripts:ro
+    command: ["sh", "/opt/drft-scripts/backup-loop.sh"]
+    restart: unless-stopped

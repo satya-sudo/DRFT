@@ -15,3 +15,5 @@ mobile/node_modules/
 mobile/.expo/
 bin/
 storage/
+data/
+backups/
