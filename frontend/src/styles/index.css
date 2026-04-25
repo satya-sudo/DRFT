@@ -997,6 +997,7 @@ video {
 .media-video-poster {
   display: grid;
   place-items: center;
+  gap: 0.55rem;
   width: 100%;
   min-height: 220px;
   background: linear-gradient(180deg, #2c2f36, #1d1f23);
@@ -1004,6 +1005,11 @@ video {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.media-video-poster svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .media-video-preview {

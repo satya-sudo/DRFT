@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -15,6 +16,10 @@ import (
 const thumbnailMaxDimension = 480
 
 func generateThumbnail(root, sourcePath, fileID string) (string, error) {
+	return generateImageThumbnail(root, sourcePath, fileID)
+}
+
+func generateImageThumbnail(root, sourcePath, fileID string) (string, error) {
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
 		return "", fmt.Errorf("open thumbnail source: %w", err)
@@ -59,6 +64,42 @@ func generateThumbnail(root, sourcePath, fileID string) (string, error) {
 	return thumbnailKey, nil
 }
 
+func generateVideoThumbnail(root, sourcePath, fileID string) (string, error) {
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return "", fmt.Errorf("ffmpeg not available: %w", err)
+	}
+
+	thumbnailKey := buildThumbnailKey(fileID)
+	fullPath := filepath.Join(root, thumbnailKey)
+
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return "", fmt.Errorf("create thumbnail directory: %w", err)
+	}
+
+	cmd := exec.Command(
+		ffmpegPath,
+		"-hide_banner",
+		"-loglevel", "error",
+		"-y",
+		"-i", sourcePath,
+		"-vf", "thumbnail,scale='if(gt(iw,ih),480,-2)':'if(gt(iw,ih),-2,480)'",
+		"-frames:v", "1",
+		fullPath,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		_ = removeFileIfExists(fullPath)
+		if len(output) > 0 {
+			return "", fmt.Errorf("generate video thumbnail: %s", strings.TrimSpace(string(output)))
+		}
+		return "", fmt.Errorf("generate video thumbnail: %w", err)
+	}
+
+	return thumbnailKey, nil
+}
+
 func buildThumbnailKey(fileID string) string {
 	normalized := strings.ReplaceAll(fileID, "-", "")
 	return filepath.ToSlash(filepath.Join("thumbnails", normalized[:2], normalized[:4], fileID+".jpg"))
@@ -92,4 +133,3 @@ func resizeNearest(source image.Image, targetWidth, targetHeight int) *image.RGB
 
 	return dst
 }
-

@@ -402,10 +402,15 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, file File) {
 	contentType := file.MIMEType
 	fileName := file.FileName
 
-	if r.URL.Query().Get("variant") == "preview" && file.ThumbnailKey.Valid {
-		fullPath = filepath.Join(h.cfg.StorageRoot, file.ThumbnailKey.String)
-		contentType = "image/jpeg"
-		fileName = file.FileName + "-preview.jpg"
+	if r.URL.Query().Get("variant") == "preview" {
+		if file.ThumbnailKey.Valid {
+			fullPath = filepath.Join(h.cfg.StorageRoot, file.ThumbnailKey.String)
+			contentType = "image/jpeg"
+			fileName = file.FileName + "-preview.jpg"
+		} else if file.MediaType == "video" {
+			response.JSON(w, http.StatusNotFound, map[string]string{"error": "preview unavailable"})
+			return
+		}
 	}
 
 	handle, err := os.Open(fullPath)
@@ -513,10 +518,16 @@ func (h *Handler) ingestMedia(ctx context.Context, userID, originalFileName stri
 	}
 
 	thumbnailKey := ""
-	if mediaType == "image" {
-		thumbnailKey, err = generateThumbnail(h.cfg.StorageRoot, savedPath, fileID)
+	switch mediaType {
+	case "image":
+		thumbnailKey, err = generateImageThumbnail(h.cfg.StorageRoot, savedPath, fileID)
 		if err != nil {
-			h.logger.Warn("thumbnail generation failed", "error", err, "path", savedPath)
+			h.logger.Warn("thumbnail generation failed", "error", err, "path", savedPath, "media_type", mediaType)
+		}
+	case "video":
+		thumbnailKey, err = generateVideoThumbnail(h.cfg.StorageRoot, savedPath, fileID)
+		if err != nil {
+			h.logger.Warn("video thumbnail generation failed", "error", err, "path", savedPath)
 		}
 	}
 

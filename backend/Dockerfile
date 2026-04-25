@@ -17,11 +17,10 @@ FROM alpine:3.20
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata ffmpeg
 
 COPY --from=builder /drft /usr/local/bin/drft
 
 EXPOSE 8080
 
 CMD ["drft"]
-

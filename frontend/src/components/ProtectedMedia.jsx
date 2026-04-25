@@ -8,6 +8,22 @@ function isDataURL(value) {
   return typeof value === "string" && value.startsWith("data:");
 }
 
+function buildProtectedMediaURL(src, token) {
+  if (!src || isObjectURL(src) || isDataURL(src)) {
+    return src || "";
+  }
+
+  try {
+    const url = new URL(src, window.location.origin);
+    if (token && !url.searchParams.has("access_token")) {
+      url.searchParams.set("access_token", token);
+    }
+    return url.toString();
+  } catch {
+    return src;
+  }
+}
+
 export default function ProtectedMedia({
   token,
   src,
@@ -21,61 +37,11 @@ export default function ProtectedMedia({
   previewDurationMs = 0
 }) {
   const videoRef = useRef(null);
-  const [resolvedSrc, setResolvedSrc] = useState(
-    isObjectURL(src) || isDataURL(src) ? src : ""
-  );
+  const resolvedSrc = buildProtectedMediaURL(src, token);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!src) {
-      setResolvedSrc("");
-      return;
-    }
-
-    if (isObjectURL(src) || isDataURL(src)) {
-      setResolvedSrc(src);
-      setFailed(false);
-      return;
-    }
-
-    let revokedURL = "";
-    let cancelled = false;
-
-    async function loadProtectedMedia() {
-      try {
-        setFailed(false);
-
-        const response = await fetch(src, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error("media fetch failed");
-        }
-
-        const blob = await response.blob();
-        revokedURL = URL.createObjectURL(blob);
-
-        if (!cancelled) {
-          setResolvedSrc(revokedURL);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setFailed(true);
-        }
-      }
-    }
-
-    loadProtectedMedia();
-
-    return () => {
-      cancelled = true;
-      if (revokedURL) {
-        URL.revokeObjectURL(revokedURL);
-      }
-    };
+    setFailed(false);
   }, [src, token]);
 
   useEffect(() => {
@@ -112,9 +78,10 @@ export default function ProtectedMedia({
         loop={loop && previewDurationMs <= 0}
         preload={autoPlay ? "metadata" : "auto"}
         playsInline
+        onError={() => setFailed(true)}
       />
     );
   }
 
-  return <img className={className} src={resolvedSrc} alt={alt} />;
+  return <img className={className} src={resolvedSrc} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }

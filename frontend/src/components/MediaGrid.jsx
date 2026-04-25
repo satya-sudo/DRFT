@@ -1,5 +1,6 @@
 import { useApp } from "../context/AppContext";
 import ProtectedMedia from "./ProtectedMedia";
+import { Icon } from "./Icons";
 
 export default function MediaGrid({ items, onSelect }) {
   const { token } = useApp();
@@ -15,15 +16,10 @@ export default function MediaGrid({ items, onSelect }) {
           onClick={() => onSelect(item)}
         >
           {item.mediaType === "video" ? (
-            <ProtectedMedia
-              token={token}
-              src={item.downloadUrl || item.previewUrl}
-              mediaType="video"
-              className="media-video-preview"
-              autoPlay
-              muted
-              previewDurationMs={4000}
-            />
+            <div className="media-video-poster">
+              <Icon name="video" />
+              <span>Video</span>
+            </div>
           ) : (
             <ProtectedMedia
               token={token}
