@@ -401,7 +401,7 @@ func (h *Handler) handleFileByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, file File) {
 	fullPath := filepath.Join(h.cfg.StorageRoot, file.StorageKey)
 	contentType := file.MIMEType
-	fileName := file.FileName
+	fileName := buildDownloadName(file)
 
 	if r.URL.Query().Get("variant") == "preview" {
 		if file.ThumbnailKey.Valid {
@@ -492,8 +492,13 @@ func buildDownloadName(file File) string {
 }
 
 func contentDisposition(fileName string) string {
+	value := mime.FormatMediaType("attachment", map[string]string{"filename": fileName})
+	if value != "" {
+		return value
+	}
+
 	escaped := strings.NewReplacer("\\", "\\\\", "\"", "\\\"").Replace(fileName)
-	return fmt.Sprintf("%s; filename=\"%s\"", mime.FormatMediaType("attachment", map[string]string{"filename": fileName}), escaped)
+	return fmt.Sprintf("attachment; filename=\"%s\"", escaped)
 }
 
 func (h *Handler) ingestMedia(ctx context.Context, userID, originalFileName string, takenAt *time.Time, source io.Reader) (File, error) {
