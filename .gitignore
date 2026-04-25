@@ -13,6 +13,7 @@ frontend/dist/
 frontend/dist-test/
 mobile/node_modules/
 mobile/.expo/
+mobile/android/
 mobile/keys/
 bin/
 storage/

@@ -44,7 +44,7 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > keys/drft-upload-key.keystore
 
       - name: Generate Android project
-        run: npx expo prebuild --platform android --non-interactive --clean
+        run: CI=1 npx expo prebuild --platform android --clean
 
       - name: Configure Android signing
         working-directory: .
