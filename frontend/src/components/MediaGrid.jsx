@@ -16,10 +16,18 @@ export default function MediaGrid({ items, onSelect }) {
           onClick={() => onSelect(item)}
         >
           {item.mediaType === "video" ? (
-            <div className="media-video-poster">
-              <Icon name="video" />
-              <span>Video</span>
-            </div>
+            item.previewUrl ? (
+              <ProtectedMedia
+                token={token}
+                src={item.previewUrl}
+                alt={item.fileName}
+              />
+            ) : (
+              <div className="media-video-poster">
+                <Icon name="video" />
+                <span>Video</span>
+              </div>
+            )
           ) : (
             <ProtectedMedia
               token={token}
