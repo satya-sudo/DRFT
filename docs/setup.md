@@ -87,6 +87,22 @@ export DRFT_NPM_STRICT_SSL=false
 make docker-up
 ```
 
+### Docker image publishing
+
+DRFT includes a GitHub Actions workflow for Docker Hub publishing:
+
+- [publish-images.yml](../.github/workflows/publish-images.yml)
+
+It supports:
+
+- manual publish with a chosen image tag
+- automatic publish when a git tag like `v0.1.0` is pushed
+
+Required GitHub repository secrets:
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
 ## First admin setup
 
 1. Start backend and frontend.

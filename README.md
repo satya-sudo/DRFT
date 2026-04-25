@@ -101,6 +101,15 @@ This pushes:
 
 And, by default, also updates `latest`.
 
+GitHub Actions image publishing:
+
+- workflow file: [`/.github/workflows/publish-images.yml`](./.github/workflows/publish-images.yml)
+- automatic publish on pushed git tags like `v0.1.0`
+- manual publish through `workflow_dispatch`
+- required GitHub repository secrets:
+  - `DOCKERHUB_USERNAME`
+  - `DOCKERHUB_TOKEN`
+
 ## Current Highlights
 
 - first-admin bootstrap and JWT login
