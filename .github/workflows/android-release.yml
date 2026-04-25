@@ -16,7 +16,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: /Users/satyamshree/Documents/projects/Drift/mobile
+        working-directory: mobile
 
     steps:
       - name: Check out repository
@@ -47,7 +47,7 @@ jobs:
         run: npx expo prebuild --platform android --non-interactive --clean
 
       - name: Configure Android signing
-        working-directory: /Users/satyamshree/Documents/projects/Drift
+        working-directory: .
         run: |
           cp mobile/keys/drft-upload-key.keystore mobile/android/app/drft-upload-key.keystore
           sh scripts/configure-android-signing.sh \
@@ -59,7 +59,7 @@ jobs:
 
       - name: Build signed release APK
         run: ./gradlew assembleRelease
-        working-directory: /Users/satyamshree/Documents/projects/Drift/mobile/android
+        working-directory: mobile/android
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
