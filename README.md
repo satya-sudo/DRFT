@@ -96,19 +96,19 @@ make docker-prod-up
 Publish images:
 
 ```bash
-./scripts/publish-images.sh v0.1.0
+./scripts/publish-images.sh v0.1.0-rc
 ```
 
 This pushes:
-- `dockermaninthehouse/drft-api:v0.1.0`
-- `dockermaninthehouse/drft-web:v0.1.0`
+- `dockermaninthehouse/drft-api:v0.1.0-rc`
+- `dockermaninthehouse/drft-web:v0.1.0-rc`
 
 And, by default, also updates `latest`.
 
 GitHub Actions image publishing:
 
 - workflow file: [`/.github/workflows/publish-images.yml`](./.github/workflows/publish-images.yml)
-- automatic publish on pushed git tags like `v0.1.0`
+- automatic publish on pushed git tags like `v0.1.0-rc`
 - manual publish through `workflow_dispatch`
 - required GitHub repository secrets:
   - `DOCKERHUB_USERNAME`

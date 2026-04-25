@@ -96,7 +96,7 @@ DRFT includes a GitHub Actions workflow for Docker Hub publishing:
 It supports:
 
 - manual publish with a chosen image tag
-- automatic publish when a git tag like `v0.1.0` is pushed
+- automatic publish when a git tag like `v0.1.0-rc` is pushed
 
 Required GitHub repository secrets:
 

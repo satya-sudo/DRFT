@@ -1,7 +1,7 @@
 {
   "name": "drft-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "v0.1.0-rc",
   "type": "module",
   "engines": {
     "node": ">=20 <21"

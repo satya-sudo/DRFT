@@ -1,0 +1,69 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: Artifact name for the built APK
+        required: true
+        default: drft-android-release
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: /Users/satyamshree/Documents/projects/Drift/mobile
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install mobile dependencies
+        run: npm ci
+
+      - name: Restore Android keystore
+        run: |
+          mkdir -p keys
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > keys/drft-upload-key.keystore
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Configure Android signing
+        working-directory: /Users/satyamshree/Documents/projects/Drift
+        run: |
+          cp mobile/keys/drft-upload-key.keystore mobile/android/app/drft-upload-key.keystore
+          sh scripts/configure-android-signing.sh \
+            mobile/android \
+            drft-upload-key.keystore \
+            "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            "${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease
+        working-directory: /Users/satyamshree/Documents/projects/Drift/mobile/android
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

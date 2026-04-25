@@ -1,6 +1,6 @@
 {
   "name": "drft-mobile",
-  "version": "0.1.0",
+  "version": "v0.1.0-rc",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "engines": {

@@ -90,3 +90,24 @@ The user still confirms the server inside the app before login.
 - Admin management and device management are not in mobile yet.
 - Video playback uses `expo-video`, which is the supported replacement for `expo-av` on the current Expo SDK line.
 - Media save-to-device uses `expo-file-system` and `expo-media-library`.
+
+## Android release build
+
+The repository now includes a GitHub Actions workflow for a signed Android APK build:
+
+- [`/.github/workflows/android-release.yml`](../.github/workflows/android-release.yml)
+
+Required GitHub repository secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+The workflow:
+
+1. installs mobile dependencies
+2. runs Expo Android prebuild in CI
+3. applies the release signing config
+4. builds `app-release.apk`
+5. uploads the APK as a GitHub Actions artifact

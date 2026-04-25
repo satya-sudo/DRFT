@@ -4,7 +4,7 @@ export default function TagsPage() {
   return (
     <AppShell
       title="Tags"
-      description="Tags are held for a later DRFT release. For v0.1.0, we are keeping the shipped experience focused and dependable."
+      description="Tags are held for a later DRFT release. For v0.1.0-rc, we are keeping the shipped experience focused and dependable."
     >
       <div className="placeholder-layout">
         <article className="surface placeholder-card">
