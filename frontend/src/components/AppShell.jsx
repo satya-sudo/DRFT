@@ -67,6 +67,14 @@ export default function AppShell({
     return `${amount.toFixed(digits)} ${units[exponent]}`;
   }
 
+  function formatVersion(value) {
+    if (!value) {
+      return "Unknown";
+    }
+
+    return value.startsWith("v") ? value : `v${value}`;
+  }
+
   function isNavItemActive(item) {
     const [pathname, query = ""] = item.to.split("?");
     if (location.pathname !== pathname) {
@@ -276,13 +284,11 @@ export default function AppShell({
                   <div className="system-version-grid">
                     <div>
                       <span>Frontend</span>
-                      <strong>v{frontendVersion}</strong>
+                      <strong>{formatVersion(frontendVersion)}</strong>
                     </div>
                     <div>
                       <span>Backend</span>
-                      <strong>
-                        {serverStatus.backendVersion ? `v${serverStatus.backendVersion}` : "Unknown"}
-                      </strong>
+                      <strong>{formatVersion(serverStatus.backendVersion)}</strong>
                     </div>
                   </div>
                   <div className="system-meta-row">

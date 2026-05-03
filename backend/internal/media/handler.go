@@ -357,11 +357,19 @@ func (h *Handler) handleStorageStats(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
+	counts, err := h.store.CountActiveFilesByUser(r.Context(), user.ID)
+	if err != nil {
+		h.serverError(w, err)
+		return
+	}
 
 	response.JSON(w, http.StatusOK, map[string]any{
 		"drftUsedBytes":  userUsedBytes,
 		"availableBytes": stats.AvailableBytes,
 		"totalBytes":     stats.TotalBytes,
+		"totalItems":     counts.TotalItems,
+		"imageItems":     counts.ImageItems,
+		"videoItems":     counts.VideoItems,
 	})
 }
 

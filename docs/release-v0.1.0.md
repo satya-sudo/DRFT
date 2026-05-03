@@ -13,49 +13,53 @@ Scope rule:
 
 ## 1. Core server
 
-- [ ] `drft-api` starts cleanly in Docker
-- [ ] `drft-web` starts cleanly in Docker
-- [ ] `postgres` is healthy
-- [ ] `/healthz` returns `200`
-- [ ] web app loads from `:3000`
-- [ ] API responds from `:8080`
-- [ ] no container restart loops
+- [x] `drft-api` starts cleanly in Docker
+- [x] `drft-web` starts cleanly in Docker
+- [x] `postgres` is healthy
+- [x] `/healthz` returns `200`
+- [x] web app loads from `:3000`
+- [x] API responds from `:8080`
+- [x] no container restart loops
 - [ ] no obvious errors in `docker compose logs`
 
 ## 2. Auth and boot flow
 
-- [ ] fresh load checks health first
-- [ ] app does not redirect to setup or login when backend is unavailable
+- [x] fresh load checks health first
+- [x] app does not redirect to setup or login when backend is unavailable
 - [ ] setup page only appears when admin is truly not created
-- [ ] login works with valid credentials
-- [ ] invalid login shows the correct error
-- [ ] existing token restores session correctly
+- [x] login works with valid credentials
+- [x] invalid login shows the correct error
+- [x] existing token restores session correctly
 - [ ] logout works
 - [ ] invalid or expired token is rejected cleanly
 
+Notes:
+
+- `setup page only appears when admin is truly not created` is intentionally still open until we run the destructive empty-db/bootstrap check.
+
 ## 3. Web app
 
-- [ ] timeline loads the first page correctly
-- [ ] infinite scroll loads more media
-- [ ] `All`, `Images`, and `Videos` filters work
-- [ ] Albums page loads
-- [ ] Tags page loads
-- [ ] server status popover shows backend status and version correctly
-- [ ] image viewer opens reliably
-- [ ] video viewer plays reliably
-- [ ] delete works with confirmation
-- [ ] upload queue survives page navigation
+- [x] timeline loads the first page correctly
+- [x] infinite scroll loads more media
+- [x] `All`, `Images`, and `Videos` filters work
+- [x] Albums page loads
+- [x] Tags page loads
+- [x] server status popover shows backend status and version correctly
+- [x] image viewer opens reliably
+- [x] video viewer plays reliably
+- [x] delete works with confirmation
+- [x] upload queue survives page navigation
 
 ## 4. Web uploads
 
-- [ ] small image upload works
-- [ ] small video upload works
-- [ ] large file upload works
-- [ ] chunked upload starts for large files
-- [ ] failed chunk retries correctly
-- [ ] upload errors show useful messages
-- [ ] uploaded media appears in the timeline without a full reload
-- [ ] nginx no longer blocks chunk uploads with `413`
+- [x] small image upload works
+- [x] small video upload works
+- [x] large file upload works
+- [x] chunked upload starts for large files
+- [x] failed chunk retries correctly
+- [x] upload errors show useful messages
+- [x] uploaded media appears in the timeline without a full reload
+- [x] nginx no longer blocks chunk uploads with `413`
 
 ## 5. Mobile app
 
@@ -82,21 +86,18 @@ Scope rule:
 
 ## 7. Media stability
 
-- [ ] image previews load fast enough
-- [ ] video previews behave predictably
-- [ ] opening one viewer item does not trigger excessive parallel media fetches
-- [ ] range requests (`206`) work for video playback
-- [ ] deleting media updates the UI correctly
+- [x] image previews load fast enough
+- [x] video previews behave predictably
+- [x] opening one viewer item does not trigger excessive parallel media fetches
+- [x] range requests (`206`) work for video playback
+- [x] deleting media updates the UI correctly
 
 ## 8. Data and collections
 
-- [ ] create album works
-- [ ] add media to album works
-- [ ] remove media from album works
-- [ ] create tag works
-- [ ] assign tag to media works
-- [ ] remove tag works
-- [ ] empty states are correct and readable
+- [x] Albums route is intentionally limited to a polished `Coming soon` page for `v0.1.0`
+- [x] Tags route is intentionally limited to a polished `Coming soon` page for `v0.1.0`
+- [x] no half-finished collection management actions are exposed in the web release
+- [x] empty states and placeholder copy are correct and readable
 
 ## 9. Production packaging
 

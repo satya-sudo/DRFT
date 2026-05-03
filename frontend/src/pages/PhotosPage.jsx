@@ -214,8 +214,9 @@ export default function PhotosPage() {
     right[0].localeCompare(left[0])
   );
 
-  const imageCount = combinedItems.filter((item) => item.mediaType === "image").length;
-  const videoCount = combinedItems.filter((item) => item.mediaType === "video").length;
+  const totalCount = storageStats?.totalItems ?? combinedItems.length;
+  const imageCount = storageStats?.imageItems ?? combinedItems.filter((item) => item.mediaType === "image").length;
+  const videoCount = storageStats?.videoItems ?? combinedItems.filter((item) => item.mediaType === "video").length;
   const pageTitle =
     filter === "image" ? "Images" : filter === "video" ? "Videos" : "All media";
   const pageDescription =
@@ -235,7 +236,7 @@ export default function PhotosPage() {
         <div className="sidebar-stats">
           <div className="sidebar-stats-header">
             <span className="eyebrow">Library</span>
-            <strong>{combinedItems.length} items</strong>
+            <strong>{totalCount} items</strong>
           </div>
           <div className="sidebar-stats-grid">
             <div className="sidebar-stat">

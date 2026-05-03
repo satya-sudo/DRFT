@@ -55,6 +55,12 @@ type FilePage struct {
 	NextOffset int
 }
 
+type LibraryCounts struct {
+	TotalItems  int
+	ImageItems  int
+	VideoItems  int
+}
+
 func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
@@ -252,4 +258,22 @@ func (s *Store) SumActiveFileBytesByUser(ctx context.Context, userID string) (in
 	}
 
 	return total.Int64, nil
+}
+
+func (s *Store) CountActiveFilesByUser(ctx context.Context, userID string) (LibraryCounts, error) {
+	var counts LibraryCounts
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*)::int AS total_items,
+			COUNT(*) FILTER (WHERE media_type = 'image')::int AS image_items,
+			COUNT(*) FILTER (WHERE media_type = 'video')::int AS video_items
+		FROM files
+		WHERE user_id = $1 AND deleted_at IS NULL
+	`, userID).Scan(&counts.TotalItems, &counts.ImageItems, &counts.VideoItems)
+	if err != nil {
+		return LibraryCounts{}, fmt.Errorf("count active files: %w", err)
+	}
+
+	return counts, nil
 }
