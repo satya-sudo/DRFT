@@ -5,6 +5,7 @@ import { buildAuthenticatedMediaURL } from "../lib/config";
 export default function AuthenticatedImage({
   allowDownloadFallback = false,
   downloadPath,
+  preferDownload = false,
   previewPath,
   resizeMode = "cover",
   style,
@@ -13,20 +14,26 @@ export default function AuthenticatedImage({
   const sources = useMemo(() => {
     const items = [];
 
+    if (preferDownload && allowDownloadFallback && downloadPath) {
+      items.push({
+        uri: buildAuthenticatedMediaURL(downloadPath, token)
+      });
+    }
+
     if (previewPath) {
       items.push({
         uri: buildAuthenticatedMediaURL(previewPath, token)
       });
     }
 
-    if (allowDownloadFallback && downloadPath) {
+    if (!preferDownload && allowDownloadFallback && downloadPath) {
       items.push({
         uri: buildAuthenticatedMediaURL(downloadPath, token)
       });
     }
 
     return items;
-  }, [downloadPath, previewPath, token]);
+  }, [allowDownloadFallback, downloadPath, preferDownload, previewPath, token]);
 
   const [sourceIndex, setSourceIndex] = useState(0);
   const [loading, setLoading] = useState(true);

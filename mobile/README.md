@@ -2,6 +2,11 @@
 
 DRFT Mobile is the Expo-based client for browsing, uploading, and viewing your private DRFT media library from Android.
 
+Roadmap note:
+
+- `v0.1.0` keeps the current Expo-based mobile client
+- `v0.2.0` is planned as a Kotlin-based native Android rewrite
+
 Target SDK:
 
 - Expo SDK 54

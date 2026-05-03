@@ -8,6 +8,11 @@ Today the repo includes:
 - a web client built with React, Vite, JavaScript, and vanilla CSS
 - an Expo-based Android/mobile client for browsing, upload, and viewer flows
 
+Mobile roadmap note:
+
+- `v0.1.0` ships with the current Expo-based Android client
+- `v0.2.0` is planned to move Android to a native Kotlin app for stronger media, upload, and playback control
+
 ## Documentation
 
 Full project documentation lives in [`docs/`](./docs/index.md).

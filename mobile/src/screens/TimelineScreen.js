@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -73,6 +73,78 @@ function formatAlbumDate(value) {
   }).format(new Date(value));
 }
 
+const MediaTile = memo(
+  function MediaTile({ entry, tileHeight, tileWidth, token, onPress }) {
+    return (
+      <Pressable
+        style={[styles.card, { width: tileWidth, height: tileHeight }]}
+        onPress={() => onPress(entry)}
+      >
+        {entry.mediaType === "video" ? (
+          <VideoPreviewTile item={entry} token={token} />
+        ) : (
+          <AuthenticatedImage
+            allowDownloadFallback={!entry.previewUrl}
+            downloadPath={entry.downloadUrl}
+            previewPath={entry.previewUrl}
+            style={styles.image}
+            token={token}
+          />
+        )}
+      </Pressable>
+    );
+  },
+  (previous, next) =>
+    previous.entry.id === next.entry.id &&
+    previous.entry.previewUrl === next.entry.previewUrl &&
+    previous.entry.downloadUrl === next.entry.downloadUrl &&
+    previous.entry.mediaType === next.entry.mediaType &&
+    previous.tileHeight === next.tileHeight &&
+    previous.tileWidth === next.tileWidth &&
+    previous.token === next.token
+);
+
+const GridRow = memo(
+  function GridRow({
+    columnCount,
+    onPressItem,
+    row,
+    tileWidth,
+    token
+  }) {
+    return (
+      <View style={styles.gridRow}>
+        {row.map((entry) => {
+          const tileHeight = getTileHeight(entry, tileWidth);
+
+          return (
+            <MediaTile
+              key={entry.id}
+              entry={entry}
+              tileHeight={tileHeight}
+              tileWidth={tileWidth}
+              token={token}
+              onPress={onPressItem}
+            />
+          );
+        })}
+
+        {row.length < columnCount
+          ? Array.from({ length: columnCount - row.length }).map((_, index) => (
+              <View key={`spacer-${index}`} style={{ width: tileWidth, height: 1 }} />
+            ))
+          : null}
+      </View>
+    );
+  },
+  (previous, next) =>
+    previous.columnCount === next.columnCount &&
+    previous.tileWidth === next.tileWidth &&
+    previous.token === next.token &&
+    previous.row.length === next.row.length &&
+    previous.row.every((entry, index) => entry.id === next.row[index]?.id)
+);
+
 export default function TimelineScreen() {
   const {
     logout,
@@ -101,8 +173,10 @@ export default function TimelineScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
+  const [storageStats, setStorageStats] = useState(null);
   const [filePagination, setFilePagination] = useState({
-    limit: 40,
+    limit: 24,
     offset: 0,
     hasMore: true
   });
@@ -110,6 +184,7 @@ export default function TimelineScreen() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("all");
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     initializeScreen();
@@ -121,14 +196,15 @@ export default function TimelineScreen() {
     }
 
     loadFiles(true, { reset: true }).catch(() => {});
-    loadCollections().catch(() => {});
+    loadStorageStats().catch(() => {});
+    loadCollections({ silent: true }).catch(() => {});
 
     if (selectedAlbumID) {
-      loadAlbumDetail(selectedAlbumID);
+      loadAlbumDetail(selectedAlbumID, { silent: true });
     }
 
     if (selectedTagID) {
-      loadTagDetail(selectedTagID);
+      loadTagDetail(selectedTagID, { silent: true });
     }
   }, [token, uploadActivityKey]);
 
@@ -158,13 +234,13 @@ export default function TimelineScreen() {
 
   useEffect(() => {
     if ((activeSection === "albums" || selectedAlbum) && selectedAlbumID) {
-      loadAlbumDetail(selectedAlbumID);
+      loadAlbumDetail(selectedAlbumID, { silent: activeSection !== "albums" });
     }
   }, [activeSection, selectedAlbumID, token]);
 
   useEffect(() => {
     if ((activeSection === "tags" || selectedTag) && selectedTagID) {
-      loadTagDetail(selectedTagID);
+      loadTagDetail(selectedTagID, { silent: activeSection !== "tags" });
     }
   }, [activeSection, selectedTagID, token]);
 
@@ -172,7 +248,8 @@ export default function TimelineScreen() {
     try {
       setLoading(true);
       setError("");
-      await Promise.all([loadFiles(true, { reset: true }), loadCollections()]);
+      await Promise.all([loadFiles(true, { reset: true }), loadStorageStats()]);
+      loadCollections({ silent: true }).catch(() => {});
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -188,13 +265,17 @@ export default function TimelineScreen() {
         if (reset) {
           setRefreshing(true);
         } else {
-          if (!filePagination.hasMore || loadingMore) {
+          if (!filePagination.hasMore || loadingMoreRef.current) {
             return;
           }
+          loadingMoreRef.current = true;
           setLoadingMore(true);
+          setLoadMoreError("");
         }
       }
-      setError("");
+      if (reset || isInitial || !items.length) {
+        setError("");
+      }
       const requestOffset = reset ? 0 : filePagination.offset;
       const response = await filesApi.listFiles(token, {
         limit: filePagination.limit,
@@ -220,21 +301,31 @@ export default function TimelineScreen() {
         offset: response.pagination?.nextOffset || requestOffset,
         hasMore: Boolean(response.pagination?.hasMore)
       });
+      if (!reset) {
+        setLoadMoreError("");
+      }
     } catch (loadError) {
-      setError(loadError.message);
+      if (reset || isInitial || !items.length) {
+        setError(loadError.message);
+      } else {
+        setLoadMoreError(loadError.message);
+        console.warn("[DRFT mobile] load more failed", loadError.message);
+      }
       throw loadError;
     } finally {
       if (!isInitial) {
         if (reset) {
           setRefreshing(false);
         } else {
+          loadingMoreRef.current = false;
           setLoadingMore(false);
         }
       }
     }
   }
 
-  async function loadCollections() {
+  async function loadCollections(options = {}) {
+    const silent = Boolean(options.silent);
     try {
       const [albumsResponse, tagsResponse] = await Promise.all([
         libraryApi.listAlbums(token),
@@ -243,12 +334,26 @@ export default function TimelineScreen() {
       setAlbums(albumsResponse.albums || []);
       setTags(tagsResponse.tags || []);
     } catch (loadError) {
-      setError(loadError.message);
+      if (!silent) {
+        setError(loadError.message);
+      } else {
+        console.warn("[DRFT mobile] collections refresh failed", loadError.message);
+      }
       throw loadError;
     }
   }
 
-  async function loadAlbumDetail(albumID) {
+  async function loadStorageStats() {
+    try {
+      const response = await filesApi.getStorageStats(token);
+      setStorageStats(response);
+    } catch (loadError) {
+      throw loadError;
+    }
+  }
+
+  async function loadAlbumDetail(albumID, options = {}) {
+    const silent = Boolean(options.silent);
     try {
       const response = await libraryApi.getAlbum(token, albumID);
       setSelectedAlbum({
@@ -256,11 +361,16 @@ export default function TimelineScreen() {
         items: response.items || []
       });
     } catch (loadError) {
-      setError(loadError.message);
+      if (!silent) {
+        setError(loadError.message);
+      } else {
+        console.warn("[DRFT mobile] album detail failed", loadError.message);
+      }
     }
   }
 
-  async function loadTagDetail(tagID) {
+  async function loadTagDetail(tagID, options = {}) {
+    const silent = Boolean(options.silent);
     try {
       const response = await libraryApi.getTag(token, tagID);
       setSelectedTag({
@@ -268,7 +378,11 @@ export default function TimelineScreen() {
         items: response.items || []
       });
     } catch (loadError) {
-      setError(loadError.message);
+      if (!silent) {
+        setError(loadError.message);
+      } else {
+        console.warn("[DRFT mobile] tag detail failed", loadError.message);
+      }
     }
   }
 
@@ -309,7 +423,7 @@ export default function TimelineScreen() {
     try {
       await filesApi.deleteFile(token, itemToDelete.id);
       setSelectedItem(null);
-      await Promise.all([loadFiles(true, { reset: true }), loadCollections()]);
+      await Promise.all([loadFiles(true, { reset: true }), loadCollections(), loadStorageStats()]);
       if (selectedAlbumID) {
         await loadAlbumDetail(selectedAlbumID);
       }
@@ -502,8 +616,9 @@ export default function TimelineScreen() {
   }, [activeSection, items, selectedCollectionItems]);
 
   const viewerItems = filteredItems;
-  const imageCount = items.filter((item) => item.mediaType === "image").length;
-  const videoCount = items.filter((item) => item.mediaType === "video").length;
+  const totalCount = storageStats?.totalItems ?? items.length;
+  const imageCount = storageStats?.imageItems ?? items.filter((item) => item.mediaType === "image").length;
+  const videoCount = storageStats?.videoItems ?? items.filter((item) => item.mediaType === "video").length;
   const columnCount = width >= 520 ? 4 : 3;
   const tileGap = 4;
   const tileWidth = Math.floor((width - 16 * 2 - tileGap * (columnCount - 1)) / columnCount);
@@ -511,7 +626,10 @@ export default function TimelineScreen() {
     () =>
       groupItems(filteredItems).map(([dateKey, group]) => ({
         title: formatDateLabel(dateKey),
-        data: chunkItems(group, columnCount)
+        data: chunkItems(group, columnCount).map((row, rowIndex) => ({
+          id: `${dateKey}-${rowIndex}-${row.map((entry) => entry.id).join("-")}`,
+          items: row
+        }))
       })),
     [columnCount, filteredItems]
   );
@@ -526,42 +644,6 @@ export default function TimelineScreen() {
     : totalQueuedCount > 0
       ? `${totalQueuedCount} recent transfer${totalQueuedCount === 1 ? "" : "s"}`
       : "";
-
-  function renderGridRow(row) {
-    return (
-      <View style={styles.gridRow}>
-        {row.map((entry) => {
-          const tileHeight = getTileHeight(entry, tileWidth);
-
-          return (
-            <Pressable
-              key={entry.id}
-              style={[styles.card, { width: tileWidth, height: tileHeight }]}
-              onPress={() => setSelectedItem(entry)}
-            >
-              {entry.mediaType === "video" ? (
-                <VideoPreviewTile item={entry} token={token} />
-              ) : (
-                <AuthenticatedImage
-                  allowDownloadFallback={!entry.previewUrl}
-                  downloadPath={entry.downloadUrl}
-                  previewPath={entry.previewUrl}
-                  style={styles.image}
-                  token={token}
-                />
-              )}
-            </Pressable>
-          );
-        })}
-
-        {row.length < columnCount
-          ? Array.from({ length: columnCount - row.length }).map((_, index) => (
-              <View key={`spacer-${index}`} style={{ width: tileWidth, height: 1 }} />
-            ))
-          : null}
-      </View>
-    );
-  }
 
   function renderMediaCollection(emptyTitle, emptyText) {
     if (!groupedItems.length) {
@@ -580,8 +662,15 @@ export default function TimelineScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{section.title}</Text>
             </View>
-            {section.data.map((row, index) => (
-              <View key={`${section.title}-${index}`}>{renderGridRow(row)}</View>
+            {section.data.map((row) => (
+              <GridRow
+                key={row.id}
+                columnCount={columnCount}
+                onPressItem={setSelectedItem}
+                row={row.items}
+                tileWidth={tileWidth}
+                token={token}
+              />
             ))}
           </View>
         ))}
@@ -602,6 +691,12 @@ export default function TimelineScreen() {
     let subtitle = `${filteredItems.length} item${filteredItems.length === 1 ? "" : "s"} in this view`;
     if (activeSection === "settings") {
       subtitle = "Control your mobile connection and session";
+    } else if (activeSection === "all") {
+      subtitle = `${totalCount} item${totalCount === 1 ? "" : "s"} in your library`;
+    } else if (activeSection === "image") {
+      subtitle = `${imageCount} image${imageCount === 1 ? "" : "s"} in your library`;
+    } else if (activeSection === "video") {
+      subtitle = `${videoCount} video${videoCount === 1 ? "" : "s"} in your library`;
     } else if (activeSection === "albums") {
       subtitle = selectedAlbum
         ? `${selectedAlbum.fileCount} item${selectedAlbum.fileCount === 1 ? "" : "s"} in ${selectedAlbum.name}`
@@ -648,7 +743,7 @@ export default function TimelineScreen() {
 
   function renderSettings() {
     return (
-      <View style={styles.settingsStack}>
+        <View style={styles.settingsStack}>
         <View style={styles.settingsCard}>
           <Text style={styles.settingsEyebrow}>Account</Text>
           <Text style={styles.settingsTitle}>{user?.name || "DRFT user"}</Text>
@@ -657,7 +752,7 @@ export default function TimelineScreen() {
 
         <View style={styles.settingsCard}>
           <Text style={styles.settingsEyebrow}>Library</Text>
-          <Text style={styles.settingsText}>{items.length} total files</Text>
+          <Text style={styles.settingsText}>{totalCount} total files</Text>
           <Text style={styles.settingsText}>{imageCount} images</Text>
           <Text style={styles.settingsText}>{videoCount} videos</Text>
           <Text style={styles.settingsText}>{albums.length} albums</Text>
@@ -927,13 +1022,13 @@ export default function TimelineScreen() {
       {["all", "image", "video"].includes(activeSection) ? (
         <SectionList
           sections={groupedItems}
-          keyExtractor={(item, index) =>
-            `${item.map((entry) => entry.id).join("-")}-${index}`
-          }
+          keyExtractor={(item) => item.id}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadFiles(false, { reset: true })}
+              onRefresh={() =>
+                Promise.all([loadFiles(false, { reset: true }), loadStorageStats()]).catch(() => {})
+              }
               tintColor="#8ab4f8"
             />
           }
@@ -944,9 +1039,19 @@ export default function TimelineScreen() {
               <Text style={styles.sectionTitle}>{section.title}</Text>
             </View>
           )}
-          renderItem={({ item: row }) => renderGridRow(row)}
-          onEndReached={() => loadFiles(false, { reset: false })}
-          onEndReachedThreshold={0.5}
+          renderItem={({ item: row }) => (
+            <GridRow
+              columnCount={columnCount}
+              onPressItem={setSelectedItem}
+              row={row.items}
+              tileWidth={tileWidth}
+              token={token}
+            />
+          )}
+          removeClippedSubviews
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={7}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No media yet</Text>
@@ -956,11 +1061,30 @@ export default function TimelineScreen() {
             </View>
           }
           ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.feedFooter}>
+            <View style={styles.feedFooter}>
+              {loadingMore ? (
                 <Text style={styles.feedFooterText}>Loading more media...</Text>
-              </View>
-            ) : null
+              ) : null}
+              {!loadingMore && loadMoreError ? (
+                <>
+                  <Text style={styles.feedFooterError}>{loadMoreError}</Text>
+                  <Pressable
+                    style={styles.loadMoreButton}
+                    onPress={() => loadFiles(false, { reset: false }).catch(() => {})}
+                  >
+                    <Text style={styles.loadMoreButtonText}>Try again</Text>
+                  </Pressable>
+                </>
+              ) : null}
+              {!loadingMore && !loadMoreError && filePagination.hasMore ? (
+                <Pressable
+                  style={styles.loadMoreButton}
+                  onPress={() => loadFiles(false, { reset: false }).catch(() => {})}
+                >
+                  <Text style={styles.loadMoreButtonText}>Load more</Text>
+                </Pressable>
+              ) : null}
+            </View>
           }
         />
       ) : null}
@@ -1102,11 +1226,29 @@ const styles = StyleSheet.create({
   feedFooter: {
     paddingTop: 8,
     paddingBottom: 22,
-    alignItems: "center"
+    alignItems: "center",
+    gap: 10
   },
   feedFooterText: {
     color: "#aeb4bb",
     fontSize: 14
+  },
+  feedFooterError: {
+    color: "#f28b82",
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18
+  },
+  loadMoreButton: {
+    borderRadius: 999,
+    backgroundColor: "#2a3445",
+    paddingHorizontal: 16,
+    paddingVertical: 10
+  },
+  loadMoreButtonText: {
+    color: "#f1f3f4",
+    fontSize: 14,
+    fontWeight: "700"
   },
   scrollContent: {
     paddingBottom: 28,

@@ -15,7 +15,7 @@ import (
 	"drft/internal/http/response"
 )
 
-const defaultChunkSizeBytes int64 = 8 << 20
+const defaultChunkSizeBytes int64 = 2 << 20
 
 type chunkUploadSession struct {
 	ID           string    `json:"id"`

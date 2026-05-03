@@ -1,8 +1,11 @@
 import { buildAPIURL } from "../config";
+import { File as UploadFile } from "expo-file-system";
 import { requestJSON } from "./client";
 
-const chunkedUploadThresholdBytes = 16 * 1024 * 1024;
-const defaultChunkTimeoutMs = 120000;
+const chunkedUploadThresholdBytes = 8 * 1024 * 1024;
+const chunkRequestTimeoutMs = 180000;
+const finalizeRequestTimeoutMs = 600000;
+const directUploadTimeoutMs = 600000;
 const chunkRetryLimit = 3;
 const chunkRetryDelayMs = 1000;
 
@@ -24,18 +27,34 @@ function clampProgress(value) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function shouldUseChunkedUpload(asset) {
-  const sizeBytes = asset.fileSize || 0;
-  const uri = asset.uri || "";
+function clampInFlightProgress(value) {
+  return Math.max(0, Math.min(95, clampProgress(value)));
+}
 
-  return sizeBytes >= chunkedUploadThresholdBytes && uri.startsWith("file://");
+function shouldUseChunkedUpload(asset) {
+  const sizeBytes = asset.sizeBytes || asset.fileSize || 0;
+  const uri = asset.uri || "";
+  const mimeType = asset.mimeType || asset.type || "";
+  const isVideo = mimeType.startsWith("video/");
+
+  return uri.startsWith("file://") && (isVideo || sizeBytes >= chunkedUploadThresholdBytes);
 }
 
 export function listFiles(token, options = {}) {
-  const limit = options.limit || 40;
+  const limit = options.limit || 24;
   const offset = options.offset || 0;
 
   return requestJSON(`/api/v1/files?limit=${limit}&offset=${offset}`, {
+    timeoutMs: 45000,
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+}
+
+export function getStorageStats(token) {
+  return requestJSON("/api/v1/storage/stats", {
+    timeoutMs: 30000,
     headers: {
       Authorization: `Bearer ${token}`
     }
@@ -61,12 +80,14 @@ function wait(delayMs) {
 }
 
 async function requestChunkedJSON(path, options = {}) {
+  const timeoutMs = options.timeoutMs || chunkRequestTimeoutMs;
+  const { timeoutMs: _timeoutMs, ...requestOptions } = options;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), defaultChunkTimeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(buildAPIURL(path), {
-      ...options,
+      ...requestOptions,
       signal: controller.signal
     }).catch((error) => {
       if (error?.name === "AbortError") {
@@ -93,15 +114,6 @@ async function requestChunkedJSON(path, options = {}) {
   }
 }
 
-async function getAssetBlob(asset) {
-  const response = await fetch(asset.uri);
-  if (!response.ok) {
-    throw new Error("Could not read the selected file");
-  }
-
-  return response.blob();
-}
-
 async function uploadChunkWithRetry({
   token,
   uploadId,
@@ -115,6 +127,7 @@ async function uploadChunkWithRetry({
     try {
       return await requestChunkedJSON(`/api/v1/uploads/${uploadId}/chunks/${chunkIndex}`, {
         method: "PUT",
+        timeoutMs: chunkRequestTimeoutMs,
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/octet-stream"
@@ -150,10 +163,15 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
     phase: "prepare",
     message: "Using chunked upload"
   });
-  const blob = await getAssetBlob(asset);
+  const sourceFile = new UploadFile(asset.uri);
   const fileName = asset.fileName || asset.name || `upload-${Date.now()}.jpg`;
-  const mimeType = asset.mimeType || asset.type || blob.type || "application/octet-stream";
-  const sizeBytes = asset.fileSize || blob.size;
+  const mimeType = asset.mimeType || asset.type || sourceFile.type || "application/octet-stream";
+  const sizeBytes = asset.sizeBytes || asset.fileSize || sourceFile.size;
+
+  if (!sizeBytes || sizeBytes <= 0) {
+    throw new Error("Could not determine the selected file size");
+  }
+
   notifyStatus(options.onStatus, {
     mode: "chunked",
     phase: "init",
@@ -161,6 +179,7 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
   });
   const session = await requestChunkedJSON("/api/v1/uploads/init", {
     method: "POST",
+    timeoutMs: chunkRequestTimeoutMs,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
@@ -175,12 +194,14 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
   const totalChunks = session.totalChunks || 1;
   const chunkSize = session.chunkSize || sizeBytes;
   let uploadedBytes = 0;
+  const handle = sourceFile.open();
 
   try {
     for (let index = 0; index < totalChunks; index += 1) {
       const start = index * chunkSize;
       const end = Math.min(start + chunkSize, sizeBytes);
-      const chunk = blob.slice(start, end, mimeType);
+      handle.offset = start;
+      const chunk = handle.readBytes(end - start);
 
       notifyStatus(options.onStatus, {
         mode: "chunked",
@@ -197,7 +218,7 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
 
       uploadedBytes = end;
       if (typeof onProgress === "function") {
-        onProgress(clampProgress((uploadedBytes / sizeBytes) * 100));
+        onProgress(clampInFlightProgress((uploadedBytes / sizeBytes) * 100));
       }
     }
 
@@ -206,8 +227,12 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
       phase: "finalize",
       message: "Finalizing upload"
     });
+    if (typeof onProgress === "function") {
+      onProgress(95);
+    }
     return requestChunkedJSON(`/api/v1/uploads/${session.uploadId}/complete`, {
       method: "POST",
+      timeoutMs: finalizeRequestTimeoutMs,
       headers: {
         Authorization: `Bearer ${token}`
       }
@@ -220,6 +245,8 @@ async function uploadAssetInChunks(token, asset, onProgress, options = {}) {
       }
     }).catch(() => {});
     throw error;
+  } finally {
+    handle.close();
   }
 }
 
@@ -261,7 +288,19 @@ export function uploadAssetWithProgress(token, asset, onProgress, options = {}) 
         return;
       }
 
-      onProgress(clampProgress((event.loaded / event.total) * 100));
+      onProgress(clampInFlightProgress((event.loaded / event.total) * 100));
+    });
+
+    request.upload.addEventListener("load", () => {
+      if (typeof onProgress === "function") {
+        onProgress(95);
+      }
+
+      notifyStatus(options.onStatus, {
+        mode: "direct",
+        phase: "finalize",
+        message: "Finalizing upload"
+      });
     });
 
     request.addEventListener("load", () => {
@@ -290,7 +329,7 @@ export function uploadAssetWithProgress(token, asset, onProgress, options = {}) 
       reject(new Error("Upload timed out before DRFT finished processing it"));
     });
 
-    request.timeout = defaultChunkTimeoutMs;
+    request.timeout = directUploadTimeoutMs;
 
     request.send(body);
   });

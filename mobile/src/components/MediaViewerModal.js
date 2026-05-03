@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import { File, Paths } from "expo-file-system";
 import * as MediaLibrary from "expo-media-library";
+import { useEvent } from "expo";
 import { VideoView, useVideoPlayer } from "expo-video";
 import AuthenticatedImage from "./AuthenticatedImage";
 import { buildAuthenticatedMediaURL } from "../lib/config";
@@ -69,6 +71,12 @@ function ViewerSlide({ active, item, token }) {
     videoPlayer.loop = false;
     videoPlayer.play();
   });
+  const { status } = useEvent(
+    player,
+    "statusChange",
+    player ? { status: player.status } : { status: "idle" }
+  );
+  const videoLoading = item.mediaType === "video" && active && status !== "readyToPlay";
 
   if (!active) {
     return <View style={styles.slide} />;
@@ -84,6 +92,11 @@ function ViewerSlide({ active, item, token }) {
           nativeControls
           surfaceType="textureView"
         />
+        {videoLoading ? (
+          <View style={styles.videoLoadingOverlay}>
+            <ActivityIndicator color="#8ab4f8" size="large" />
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -93,6 +106,7 @@ function ViewerSlide({ active, item, token }) {
       <AuthenticatedImage
         allowDownloadFallback
         downloadPath={item.downloadUrl}
+        preferDownload
         previewPath={item.previewUrl}
         resizeMode="contain"
         style={styles.viewerMedia}
@@ -337,6 +351,12 @@ const styles = StyleSheet.create({
   viewerMedia: {
     width: "100%",
     height: "100%"
+  },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(12, 13, 16, 0.38)"
   },
   actionBar: {
     position: "absolute",

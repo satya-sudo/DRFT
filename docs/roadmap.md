@@ -75,6 +75,12 @@ This roadmap is split into what is done, what should come next, and later-stage 
 - tags
 - search by filename/date/media type
 
+### Milestone 10: Native Android client
+
+- keep `v0.1.0` on the current Expo-based mobile client
+- move `v0.2.0` Android work to a Kotlin-based native client
+- prioritize stronger upload control, playback stability, background behavior, and memory handling
+
 ## Longer-term ideas
 
 - sharing links
@@ -93,4 +99,4 @@ This roadmap is split into what is done, what should come next, and later-stage 
 3. Bulk actions in the gallery
 4. Better metadata extraction
 5. Search and albums
-
+6. Kotlin Android planning for `v0.2.0`

@@ -63,16 +63,22 @@ Notes:
 
 ## 5. Mobile app
 
-- [ ] app boots with saved server prefilled
-- [ ] change server keeps the current value populated
-- [ ] login works
+- [x] app boots with saved server prefilled
+- [x] change server keeps the current value populated
+- [x] login works
 - [ ] timeline loads reliably
-- [ ] infinite scroll loads more items
-- [ ] `All`, `Images`, and `Videos` sections work
+- [x] paginated loading is stable without repeated load-more timeout spam
+- [x] `All`, `Images`, and `Videos` sections work
 - [ ] Albums and Tags screens open
 - [ ] image viewer opens reliably
 - [ ] video viewer plays reliably
 - [ ] media requests do not intermittently fail with `401`
+
+Notes:
+
+- mobile counts now use backend totals instead of the currently paginated on-screen items
+- the repeated mobile `load more failed DRFT API request timed out` loop is considered fixed
+- mobile still has known instability around upload reliability, video playback, and general request timing, so this section is not release-green yet
 
 ## 6. Mobile uploads
 
@@ -83,6 +89,11 @@ Notes:
 - [ ] retry actually restarts a failed upload
 - [ ] stuck uploads are either resolved or reproducible with a clear cause
 - [ ] queue messaging clearly shows direct vs chunked upload path
+
+Notes:
+
+- mobile now prefers chunked upload much more aggressively, but upload speed and reliability are still not stable enough to mark this section done
+- the current mobile client should be treated as foreground-only for uploads during `v0.1.0`
 
 ## 7. Media stability
 
@@ -121,6 +132,12 @@ Notes:
 - [ ] play video works
 - [ ] delete one item works
 - [ ] restart the stack and verify the app still works
+
+## Current release read
+
+- web is close to `v0.1.0-rc` ready
+- backend and Docker startup are in good shape
+- mobile is improved, but still not stable enough to call release-ready without more upload and playback work
 
 ## Suggested execution order
 

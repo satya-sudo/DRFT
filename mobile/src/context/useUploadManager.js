@@ -51,6 +51,9 @@ async function stageAssetForUpload(asset, index) {
 
   return {
     ...asset,
+    fileSize: asset.fileSize || stagedFile.size || 0,
+    sizeBytes: asset.sizeBytes || asset.fileSize || stagedFile.size || 0,
+    mimeType: asset.mimeType || stagedFile.type || asset.type || "application/octet-stream",
     stagedFileUri: stagedFile.uri,
     uri: stagedFile.uri
   };
@@ -204,7 +207,7 @@ export function useUploadManager(token) {
       id: createUploadID(asset, index),
       asset,
       name: formatAssetName(asset, index),
-      sizeBytes: asset.fileSize || 0,
+      sizeBytes: asset.sizeBytes || asset.fileSize || 0,
       progress: 0,
       detail: "Preparing upload",
       mode: "",

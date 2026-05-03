@@ -1,6 +1,6 @@
 import { buildAPIURL } from "../config";
 
-const REQUEST_TIMEOUT_MS = 8000;
+const REQUEST_TIMEOUT_MS = 20000;
 
 export class APIError extends Error {
   constructor(message, options = {}) {
@@ -13,13 +13,13 @@ export class APIError extends Error {
 }
 
 export async function requestJSON(path, options = {}) {
-  const { baseUrl: requestBaseUrl, ...requestOptions } = options;
+  const { baseUrl: requestBaseUrl, timeoutMs = REQUEST_TIMEOUT_MS, ...requestOptions } = options;
   const headers = {
     ...(requestOptions.headers || {})
   };
   let body = requestOptions.body;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   if (
     body &&
