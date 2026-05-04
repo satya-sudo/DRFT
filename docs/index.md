@@ -14,6 +14,7 @@ This documentation captures:
 
 - [Current status](./status.md)
 - [v0.1.0 release checklist](./release-v0.1.0.md)
+- [Kotlin Android plan for v0.2.0](./android-v0.2.0-plan.md)
 - [Architecture](./architecture.md)
 - [Backend and API](./backend.md)
 - [Frontend and UX](./frontend.md)

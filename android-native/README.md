@@ -48,3 +48,9 @@ The first Kotlin milestones should mirror the parts of DRFT mobile that matter m
 ## Build note
 
 This is an initial scaffold for the rewrite branch. It is intentionally separate from the Expo CI workflow and will get its own Android-native build workflow as the Kotlin client becomes functional.
+
+## Tracking plan
+
+The feature-by-feature migration plan lives here:
+
+- [`docs/android-v0.2.0-plan.md`](../docs/android-v0.2.0-plan.md)
