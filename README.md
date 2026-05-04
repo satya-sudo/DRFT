@@ -7,11 +7,17 @@ Today the repo includes:
 - a Go backend in `backend/` with auth, media storage, streaming, and admin management
 - a web client built with React, Vite, JavaScript, and vanilla CSS
 - an Expo-based Android/mobile client for browsing, upload, and viewer flows
+- a user-facing landing site in `site/` for GitHub Pages
 
 Mobile roadmap note:
 
 - `v0.1.0` ships with the current Expo-based Android client
 - `v0.2.0` is planned to move Android to a native Kotlin app for stronger media, upload, and playback control
+
+Landing page note:
+
+- `site/` is the public-facing DRFT product site
+- it is intended for GitHub Pages deployment
 
 ## Documentation
 

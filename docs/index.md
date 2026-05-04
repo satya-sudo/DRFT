@@ -12,6 +12,7 @@ This documentation captures:
 
 ## Documentation
 
+- [Public landing site](../site/README.md)
 - [Current status](./status.md)
 - [v0.1.0 release checklist](./release-v0.1.0.md)
 - [Architecture](./architecture.md)
