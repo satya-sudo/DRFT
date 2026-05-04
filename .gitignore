@@ -15,6 +15,9 @@ mobile/node_modules/
 mobile/.expo/
 mobile/android/
 mobile/keys/
+android-native/.gradle/
+android-native/local.properties
+android-native/**/build/
 bin/
 storage/
 data/

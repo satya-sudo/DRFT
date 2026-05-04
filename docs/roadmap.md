@@ -80,6 +80,7 @@ This roadmap is split into what is done, what should come next, and later-stage 
 - keep `v0.1.0` on the current Expo-based mobile client
 - move `v0.2.0` Android work to a Kotlin-based native client
 - prioritize stronger upload control, playback stability, background behavior, and memory handling
+- keep the native rewrite in `android-native/` so the Expo client can remain stable during the transition
 
 ## Longer-term ideas
 

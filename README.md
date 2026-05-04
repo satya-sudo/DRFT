@@ -7,11 +7,13 @@ Today the repo includes:
 - a Go backend in `backend/` with auth, media storage, streaming, and admin management
 - a web client built with React, Vite, JavaScript, and vanilla CSS
 - an Expo-based Android/mobile client for browsing, upload, and viewer flows
+- a Kotlin native Android rewrite track in [`android-native/`](./android-native) for `v0.2.0`
 
 Mobile roadmap note:
 
 - `v0.1.0` ships with the current Expo-based Android client
 - `v0.2.0` is planned to move Android to a native Kotlin app for stronger media, upload, and playback control
+- the first native scaffold now lives in [`android-native/`](./android-native)
 
 ## Documentation
 
