@@ -22,3 +22,5 @@ bin/
 storage/
 data/
 backups/
+!android-native/app/src/main/java/com/drft/mobile/data/
+!android-native/app/src/main/java/com/drft/mobile/data/**

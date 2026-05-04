@@ -257,8 +257,11 @@ This is the recommended sequence so we keep momentum without building on unstabl
 ### Phase 1: foundation
 
 - [ ] A1 App foundation
+  Current note: base Compose shell is in place on the Kotlin branch, but CI and wrapper work are still pending.
 - [ ] A2 Data and networking foundation
+  Current note: Retrofit service and timeout/profile scaffolding are in place, but no real feature calls are wired into screens yet.
 - [ ] A3 Local persistence foundation
+  Current note: DataStore-backed server and auth-token persistence scaffolding is in place, but real session and logout flows still need screen integration.
 
 ### Phase 2: first usable flow
 
