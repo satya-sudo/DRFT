@@ -7,14 +7,17 @@
     "node": ">=20 <21"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "sync-docs": "mkdir -p public/docs && cp ../docs/*.md public/docs/",
+    "dev": "npm run sync-docs && vite",
+    "build": "npm run sync-docs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@vitejs/plugin-react": "4.2.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "vite": "4.5.14"
   }
 }
