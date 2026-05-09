@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,23 +20,26 @@ import (
 
 	"drft/internal/auth"
 	"drft/internal/config"
+	"drft/internal/enrichment"
 	"drft/internal/http/response"
 	"github.com/lib/pq"
 )
 
 type Handler struct {
-	cfg    config.Config
-	logger *slog.Logger
-	auth   *auth.Handler
-	store  *Store
+	cfg        config.Config
+	logger     *slog.Logger
+	auth       *auth.Handler
+	store      *Store
+	enrichment *enrichment.Store
 }
 
 func NewHandler(cfg config.Config, logger *slog.Logger, authHandler *auth.Handler, db *sql.DB) *Handler {
 	return &Handler{
-		cfg:    cfg,
-		logger: logger,
-		auth:   authHandler,
-		store:  NewStore(db),
+		cfg:        cfg,
+		logger:     logger,
+		auth:       authHandler,
+		store:      NewStore(db),
+		enrichment: enrichment.NewStore(db),
 	}
 }
 
@@ -186,8 +189,8 @@ func (h *Handler) handleChunkUploadInit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response.JSON(w, http.StatusCreated, map[string]any{
-		"uploadId":   session.ID,
-		"chunkSize":  session.ChunkSize,
+		"uploadId":    session.ID,
+		"chunkSize":   session.ChunkSize,
 		"totalChunks": session.TotalChunks,
 	})
 }
@@ -476,19 +479,19 @@ func (h *Handler) serializeFile(file File) map[string]any {
 	}
 
 	return map[string]any{
-		"id":          file.ID,
-		"fileName":    file.FileName,
+		"id":           file.ID,
+		"fileName":     file.FileName,
 		"downloadName": buildDownloadName(file),
-		"mediaType":   file.MediaType,
-		"mimeType":    file.MIMEType,
-		"sizeBytes":   file.SizeBytes,
-		"widthPx":     nullableInt(file.WidthPX),
-		"heightPx":    nullableInt(file.HeightPX),
-		"durationMs":  nullableInt(file.DurationMS),
-		"takenAt":     takenAt.UTC().Format(time.RFC3339),
-		"createdAt":   file.CreatedAt.UTC().Format(time.RFC3339),
-		"previewUrl":  fmt.Sprintf("/api/v1/file/%s?variant=preview", file.ID),
-		"downloadUrl": fmt.Sprintf("/api/v1/file/%s", file.ID),
+		"mediaType":    file.MediaType,
+		"mimeType":     file.MIMEType,
+		"sizeBytes":    file.SizeBytes,
+		"widthPx":      nullableInt(file.WidthPX),
+		"heightPx":     nullableInt(file.HeightPX),
+		"durationMs":   nullableInt(file.DurationMS),
+		"takenAt":      takenAt.UTC().Format(time.RFC3339),
+		"createdAt":    file.CreatedAt.UTC().Format(time.RFC3339),
+		"previewUrl":   fmt.Sprintf("/api/v1/file/%s?variant=preview", file.ID),
+		"downloadUrl":  fmt.Sprintf("/api/v1/file/%s", file.ID),
 	}
 }
 
@@ -583,6 +586,12 @@ func (h *Handler) ingestMedia(ctx context.Context, userID, originalFileName stri
 			_ = removeFileIfExists(filepath.Join(h.cfg.StorageRoot, thumbnailKey))
 		}
 		return File{}, err
+	}
+
+	if h.cfg.EnrichmentEnabled && mediaType == "image" {
+		if err := h.enrichment.EnqueueFile(ctx, userID, createdFile.ID); err != nil {
+			h.logger.Warn("enrichment enqueue failed", "error", err, "file_id", createdFile.ID, "user_id", userID)
+		}
 	}
 
 	return createdFile, nil

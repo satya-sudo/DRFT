@@ -15,6 +15,7 @@ This documentation captures:
 - [Public landing site](../site/README.md)
 - [Current status](./status.md)
 - [v0.1.0 release checklist](./release-v0.1.0.md)
+- [v0.3.0 face and place enrichment plan](./v0.3.0-face-place-enrichment.md)
 - [Architecture](./architecture.md)
 - [Backend and API](./backend.md)
 - [Frontend and UX](./frontend.md)

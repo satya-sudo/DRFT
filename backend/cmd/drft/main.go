@@ -13,9 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"drft/internal/auth"
 	"drft/internal/app"
+	"drft/internal/auth"
 	"drft/internal/config"
+	"drft/internal/enrichment"
 	"drft/internal/version"
 	"drft/migrations"
 	_ "github.com/lib/pq"
@@ -35,6 +36,14 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "reset-password" {
 		if err := runResetPasswordCommand(cfg, logger, os.Args[2:]); err != nil {
 			logger.Error("reset password", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "enricher" {
+		if err := runEnricherCommand(cfg, logger); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("enricher failed", "error", err)
 			os.Exit(1)
 		}
 		return
@@ -76,6 +85,32 @@ func main() {
 	}
 
 	logger.Info("server stopped")
+}
+
+func runEnricherCommand(cfg config.Config, logger *slog.Logger) error {
+	db, err := openDatabase(cfg)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	worker := enrichment.NewWorker(cfg, logger, db, nil)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- worker.Run(ctx)
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Info("enricher shutdown signal received")
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	}
 }
 
 func runResetPasswordCommand(cfg config.Config, logger *slog.Logger, args []string) error {

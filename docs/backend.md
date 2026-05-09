@@ -16,6 +16,8 @@
   app wiring and startup
 - `backend/internal/auth/`
   auth, roles, tokens, password reset, mailer
+- `backend/internal/enrichment/`
+  enrichment queue, worker lifecycle, per-user status, and backfill APIs
 - `backend/internal/media/`
   upload, metadata extraction, serving, storage stats
 - `backend/migrations/`
@@ -45,6 +47,15 @@
 - `GET /api/v1/file/:id`
 - `DELETE /api/v1/file/:id`
 - `GET /api/v1/storage/stats`
+
+### Enrichment foundation
+
+- `GET /api/v1/enrichment/status`
+- `POST /api/v1/enrichment/backfill`
+
+Worker runtime:
+
+- `drft enricher`
 
 ## Current backend behavior
 
@@ -103,6 +114,19 @@ Current upload flow:
 6. extract metadata
 7. generate image thumbnail if applicable
 8. insert DB record tied to `user_id`
+9. if enabled and the file is an image, enqueue enrichment work for async face/place processing
+
+### Enrichment worker lifecycle
+
+Current worker flow:
+
+1. `drft enricher` opens the shared PostgreSQL database
+2. it claims pending enrichment jobs with row locking
+3. it marks a file as `processing`
+4. it runs the current enrichment processor
+5. it marks the job and file enrichment state as `completed` or `failed`
+
+The current processor is a placeholder so the queue lifecycle can be exercised safely before real face and place analyzers are added.
 
 ### Storage stats
 
@@ -125,6 +149,9 @@ Core:
 - `DRFT_STORAGE_ROOT`
 - `DRFT_JWT_SECRET`
 - `DRFT_MAX_UPLOAD_SIZE_BYTES`
+- `DRFT_ENRICHMENT_ENABLED`
+- `DRFT_ENRICHMENT_BATCH_SIZE`
+- `DRFT_ENRICHMENT_POLL_INTERVAL_SECONDS`
 
 Password reset / email:
 

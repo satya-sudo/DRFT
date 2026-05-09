@@ -10,6 +10,7 @@ import (
 
 	"drft/internal/auth"
 	"drft/internal/config"
+	"drft/internal/enrichment"
 	drfthttp "drft/internal/http"
 	"drft/internal/library"
 	"drft/internal/media"
@@ -18,12 +19,13 @@ import (
 )
 
 type App struct {
-	cfg    config.Config
-	logger *slog.Logger
-	db     *sql.DB
-	auth   *auth.Handler
-	media  *media.Handler
-	library *library.Handler
+	cfg               config.Config
+	logger            *slog.Logger
+	db                *sql.DB
+	auth              *auth.Handler
+	media             *media.Handler
+	enrichment        *enrichment.Handler
+	library           *library.Handler
 	stopUploadCleanup func()
 }
 
@@ -55,23 +57,25 @@ func New(cfg config.Config, logger *slog.Logger) (*App, error) {
 	}
 
 	return &App{
-		cfg:    cfg,
-		logger: logger,
-		db:     db,
-		auth:   authHandler,
-		media:  media.NewHandler(cfg, logger, authHandler, db),
-		library: library.NewHandler(logger, authHandler, db),
+		cfg:               cfg,
+		logger:            logger,
+		db:                db,
+		auth:              authHandler,
+		media:             media.NewHandler(cfg, logger, authHandler, db),
+		enrichment:        enrichment.NewHandler(cfg, logger, authHandler, db),
+		library:           library.NewHandler(logger, authHandler, db),
 		stopUploadCleanup: media.StartUploadCleanupLoop(cfg.StorageRoot, uploadSessionTTL, logger),
 	}, nil
 }
 
 func (a *App) Routes() http.Handler {
 	router := drfthttp.NewRouter(drfthttp.Dependencies{
-		Config: a.cfg,
-		Logger: a.logger,
-		Auth:   a.auth,
-		Media:  a.media,
-		Library: a.library,
+		Config:     a.cfg,
+		Logger:     a.logger,
+		Auth:       a.auth,
+		Media:      a.media,
+		Enrichment: a.enrichment,
+		Library:    a.library,
 	})
 
 	return drfthttp.WithRequestLogging(a.logger, router)
