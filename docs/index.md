@@ -15,6 +15,7 @@ This documentation captures:
 - [Current status](./status.md)
 - [v0.1.0 release checklist](./release-v0.1.0.md)
 - [Kotlin Android plan for v0.2.0](./android-v0.2.0-plan.md)
+- [OpenAPI-style backend spec](./openapi-v0.1.0.yaml)
 - [Architecture](./architecture.md)
 - [Backend and API](./backend.md)
 - [Frontend and UX](./frontend.md)
@@ -46,11 +47,11 @@ DRFT is aiming for a private, reliable, extensible personal media cloud with:
 
 ## GitHub Pages
 
-This `docs/` directory is structured to work well with GitHub Pages.
+The public DRFT site now deploys through the repo GitHub Actions workflow in `site/`.
 
 Suggested repo settings:
 
 1. Open GitHub repository settings.
 2. Go to `Pages`.
-3. Set source to `Deploy from a branch`.
-4. Choose your default branch and `/docs` as the folder.
+3. Set source to `GitHub Actions`.
+4. Let the landing-site workflow publish the built site.

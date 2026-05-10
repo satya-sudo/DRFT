@@ -266,7 +266,9 @@ This is the recommended sequence so we keep momentum without building on unstabl
 ### Phase 2: first usable flow
 
 - [ ] F1 Server setup and validation
+  Current note: Kotlin server-entry screen is now replacing the placeholder and uses the same validate-before-login behavior as the Expo app.
 - [ ] F2 Authentication
+  Current note: Kotlin login screen is now replacing the placeholder and is wired toward the same DRFT login flow as the Expo app.
 - [ ] F3 App shell and navigation
 
 ### Phase 3: browsing experience

@@ -1,0 +1,1186 @@
+openapi: 3.1.0
+info:
+  title: DRFT API
+  version: v0.1.0
+  description: >
+    OpenAPI-style reference for the DRFT backend as implemented in the Go handlers.
+    This is the repo-native backend contract for v0.1.0.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: System
+  - name: Setup and Auth
+  - name: Admin
+  - name: Media
+  - name: Uploads
+  - name: Library
+paths:
+  /healthz:
+    get:
+      tags: [System]
+      summary: Health check
+      responses:
+        "200":
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /api/v1/setup/status:
+    get:
+      tags: [Setup and Auth]
+      summary: Get first-admin setup status
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [adminExists]
+                properties:
+                  adminExists:
+                    type: boolean
+  /api/v1/setup/admin:
+    post:
+      tags: [Setup and Auth]
+      summary: Create the first admin user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "201":
+          description: Admin session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "409":
+          $ref: "#/components/responses/Error409"
+  /api/v1/auth/login:
+    post:
+      tags: [Setup and Auth]
+      summary: Sign in to DRFT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/auth/me:
+    get:
+      tags: [Setup and Auth]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/PublicUser"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/auth/password-reset/request:
+    post:
+      tags: [Setup and Auth]
+      summary: Request email password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Reset request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error400"
+        "503":
+          description: Email reset is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/auth/password-reset/confirm:
+    post:
+      tags: [Setup and Auth]
+      summary: Confirm email password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PublicUser"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+    post:
+      tags: [Admin]
+      summary: Create user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [admin, user]
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/PublicUser"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "409":
+          $ref: "#/components/responses/Error409"
+  /api/v1/admin/users/{id}:
+    delete:
+      tags: [Admin]
+      summary: Delete user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+  /api/v1/files:
+    get:
+      tags: [Media]
+      summary: List media for current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 40
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paged media list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, pagination]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FileItem"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/upload:
+    post:
+      tags: [Media]
+      summary: Upload a file using multipart form
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                taken_at:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item:
+                    $ref: "#/components/schemas/FileItem"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "409":
+          $ref: "#/components/responses/Error409"
+  /api/v1/uploads/init:
+    post:
+      tags: [Uploads]
+      summary: Start chunked upload session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, sizeBytes]
+              properties:
+                fileName:
+                  type: string
+                sizeBytes:
+                  type: integer
+                  format: int64
+                mimeType:
+                  type: string
+                takenAt:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Upload session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkInitResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/uploads/{uploadId}/chunks/{index}:
+    put:
+      tags: [Uploads]
+      summary: Upload one chunk
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+        - name: index
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Chunk stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChunkProgressResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/uploads/{uploadId}/complete:
+    post:
+      tags: [Uploads]
+      summary: Complete chunked upload
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      responses:
+        "201":
+          description: Chunked upload finalized into media item
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [item]
+                properties:
+                  item:
+                    $ref: "#/components/schemas/FileItem"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/uploads/{uploadId}:
+    delete:
+      tags: [Uploads]
+      summary: Cancel chunked upload
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UploadId"
+      responses:
+        "200":
+          description: Upload cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/storage/stats:
+    get:
+      tags: [Media]
+      summary: Get storage totals and per-user counts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Storage stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageStatsResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/file/{id}:
+    get:
+      tags: [Media]
+      summary: Download or stream a file
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+        - name: variant
+          in: query
+          schema:
+            type: string
+            enum: [preview]
+      responses:
+        "200":
+          description: File content
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Partial content for range requests
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Media]
+      summary: Delete a file
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+      responses:
+        "200":
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/albums:
+    get:
+      tags: [Library]
+      summary: List albums
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Albums
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [albums]
+                properties:
+                  albums:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Album"
+    post:
+      tags: [Library]
+      summary: Create album
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Album created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [album]
+                properties:
+                  album:
+                    $ref: "#/components/schemas/Album"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/albums/{id}:
+    get:
+      tags: [Library]
+      summary: Get album with items
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlbumId"
+      responses:
+        "200":
+          description: Album detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [album, items]
+                properties:
+                  album:
+                    $ref: "#/components/schemas/Album"
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FileItem"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+    patch:
+      tags: [Library]
+      summary: Update album
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlbumId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "200":
+          description: Album updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [album]
+                properties:
+                  album:
+                    $ref: "#/components/schemas/Album"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Library]
+      summary: Delete album
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlbumId"
+      responses:
+        "200":
+          description: Album deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/albums/{id}/files:
+    post:
+      tags: [Library]
+      summary: Add files to album
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlbumId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileIds]
+              properties:
+                fileIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Album updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [album]
+                properties:
+                  album:
+                    $ref: "#/components/schemas/Album"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/albums/{id}/files/{fileId}:
+    delete:
+      tags: [Library]
+      summary: Remove file from album
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AlbumId"
+        - $ref: "#/components/parameters/FileId"
+      responses:
+        "200":
+          description: File removed from album
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/tags:
+    get:
+      tags: [Library]
+      summary: List tags
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tags]
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tag"
+    post:
+      tags: [Library]
+      summary: Create tag
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                color:
+                  type: string
+      responses:
+        "201":
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tag]
+                properties:
+                  tag:
+                    $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+  /api/v1/tags/{id}:
+    get:
+      tags: [Library]
+      summary: Get tag with items
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TagId"
+      responses:
+        "200":
+          description: Tag detail
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tag, items]
+                properties:
+                  tag:
+                    $ref: "#/components/schemas/Tag"
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FileItem"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+    patch:
+      tags: [Library]
+      summary: Update tag
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TagId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                color:
+                  type: string
+      responses:
+        "200":
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tag]
+                properties:
+                  tag:
+                    $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Library]
+      summary: Delete tag
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TagId"
+      responses:
+        "200":
+          description: Tag deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/files/{id}/tags:
+    post:
+      tags: [Library]
+      summary: Add tag to file
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tagId]
+              properties:
+                tagId:
+                  type: string
+      responses:
+        "200":
+          description: Tag relation added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+  /api/v1/files/{id}/tags/{tagId}:
+    delete:
+      tags: [Library]
+      summary: Remove tag from file
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+        - $ref: "#/components/parameters/TagId"
+      responses:
+        "200":
+          description: Tag relation removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "404":
+          $ref: "#/components/responses/Error404"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    FileId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    AlbumId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    TagId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    Error400:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error401:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error403:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error404:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error409:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, version, env, timestamp]
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+        version:
+          type: string
+        env:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+    Permissions:
+      type: object
+      additionalProperties:
+        type: boolean
+    PublicUser:
+      type: object
+      required: [id, name, email, role, permissions, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, user]
+        permissions:
+          $ref: "#/components/schemas/Permissions"
+        createdAt:
+          type: string
+          format: date-time
+    SessionResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/PublicUser"
+    Pagination:
+      type: object
+      required: [limit, offset, nextOffset, hasMore]
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        nextOffset:
+          type: integer
+          nullable: true
+        hasMore:
+          type: boolean
+    FileItem:
+      type: object
+      required:
+        - id
+        - fileName
+        - downloadName
+        - mediaType
+        - mimeType
+        - sizeBytes
+        - takenAt
+        - createdAt
+        - previewUrl
+        - downloadUrl
+      properties:
+        id:
+          type: string
+        fileName:
+          type: string
+        downloadName:
+          type: string
+        mediaType:
+          type: string
+          enum: [image, video]
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        widthPx:
+          type: integer
+          format: int64
+          nullable: true
+        heightPx:
+          type: integer
+          format: int64
+          nullable: true
+        durationMs:
+          type: integer
+          format: int64
+          nullable: true
+        takenAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        previewUrl:
+          type: string
+        downloadUrl:
+          type: string
+    ChunkInitResponse:
+      type: object
+      required: [uploadId, chunkSize, totalChunks]
+      properties:
+        uploadId:
+          type: string
+        chunkSize:
+          type: integer
+          format: int64
+        totalChunks:
+          type: integer
+    ChunkProgressResponse:
+      type: object
+      required: [uploadId, receivedCount, totalChunks]
+      properties:
+        uploadId:
+          type: string
+        receivedCount:
+          type: integer
+        totalChunks:
+          type: integer
+    StorageStatsResponse:
+      type: object
+      required:
+        - drftUsedBytes
+        - availableBytes
+        - totalBytes
+        - totalItems
+        - imageItems
+        - videoItems
+      properties:
+        drftUsedBytes:
+          type: integer
+          format: int64
+        availableBytes:
+          type: integer
+          format: int64
+        totalBytes:
+          type: integer
+          format: int64
+        totalItems:
+          type: integer
+        imageItems:
+          type: integer
+        videoItems:
+          type: integer
+    Album:
+      type: object
+      required: [id, name, fileCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        coverFileId:
+          type: string
+          nullable: true
+        fileCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Tag:
+      type: object
+      required: [id, name, fileCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+        fileCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

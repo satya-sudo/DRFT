@@ -23,6 +23,10 @@
 
 ## Current API surface
 
+OpenAPI-style reference:
+
+- [`openapi-v0.1.0.yaml`](./openapi-v0.1.0.yaml)
+
 ### Setup and auth
 
 - `GET /api/v1/setup/status`
@@ -45,6 +49,23 @@
 - `GET /api/v1/file/:id`
 - `DELETE /api/v1/file/:id`
 - `GET /api/v1/storage/stats`
+
+### Library
+
+- `GET /api/v1/albums`
+- `POST /api/v1/albums`
+- `GET /api/v1/albums/:id`
+- `PATCH /api/v1/albums/:id`
+- `DELETE /api/v1/albums/:id`
+- `POST /api/v1/albums/:id/files`
+- `DELETE /api/v1/albums/:id/files/:fileId`
+- `GET /api/v1/tags`
+- `POST /api/v1/tags`
+- `GET /api/v1/tags/:id`
+- `PATCH /api/v1/tags/:id`
+- `DELETE /api/v1/tags/:id`
+- `POST /api/v1/files/:id/tags`
+- `DELETE /api/v1/files/:id/tags/:tagId`
 
 ## Current backend behavior
 

@@ -3,6 +3,13 @@ package com.drft.mobile.ui
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartDisplay
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -16,9 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.drft.mobile.ui.screens.LibraryPlaceholder
-import com.drft.mobile.ui.screens.LoginPlaceholder
-import com.drft.mobile.ui.screens.ServerSetupPlaceholder
+import com.drft.mobile.ui.screens.LoginScreen
+import com.drft.mobile.ui.screens.ServerSetupScreen
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DrftApp(
     appViewModel: AppViewModel = viewModel()
@@ -41,7 +49,12 @@ fun DrftApp(
                         NavigationBarItem(
                             selected = uiState.activeSection == section,
                             onClick = { appViewModel.setActiveSection(section) },
-                            icon = {},
+                            icon = {
+                                Icon(
+                                    imageVector = section.icon,
+                                    contentDescription = section.label
+                                )
+                            },
                             label = { Text(section.label) }
                         )
                     }
@@ -57,15 +70,32 @@ fun DrftApp(
         ) {
             when (uiState.destination) {
                 RootDestination.ServerSetup -> {
-                    ServerSetupPlaceholder(serverUrl = uiState.session.serverUrl)
+                    ServerSetupScreen(
+                        serverUrl = uiState.session.serverUrl,
+                        appViewModel = appViewModel
+                    )
                 }
                 RootDestination.Login -> {
-                    LoginPlaceholder(serverUrl = uiState.session.serverUrl)
+                    LoginScreen(
+                        serverUrl = uiState.session.serverUrl,
+                        appViewModel = appViewModel
+                    )
                 }
                 RootDestination.Library -> {
                     LibraryPlaceholder(
                         section = uiState.activeSection,
-                        serverUrl = uiState.session.serverUrl
+                        serverUrl = uiState.session.serverUrl,
+                        authToken = uiState.session.authToken,
+                        activeUser = uiState.activeUser,
+                        librarySummary = uiState.librarySummary,
+                        timelineState = uiState.timelineState,
+                        libraryLoading = uiState.libraryLoading,
+                        libraryError = uiState.libraryError,
+                        loadingMore = uiState.loadingMore,
+                        onRefresh = appViewModel::refreshLibrary,
+                        onLoadMore = appViewModel::loadMoreLibrary,
+                        onChangeServer = appViewModel::openServerSetup,
+                        onSignOut = appViewModel::signOut
                     )
                 }
             }
@@ -79,6 +109,14 @@ private val DrftSection.label: String
         DrftSection.Images -> "Images"
         DrftSection.Videos -> "Videos"
         DrftSection.Settings -> "Settings"
+    }
+
+private val DrftSection.icon
+    get() = when (this) {
+        DrftSection.All -> Icons.Filled.Collections
+        DrftSection.Images -> Icons.Filled.Image
+        DrftSection.Videos -> Icons.Filled.SmartDisplay
+        DrftSection.Settings -> Icons.Filled.Settings
     }
 
 private fun topBarTitle(destination: RootDestination, section: DrftSection): String {
