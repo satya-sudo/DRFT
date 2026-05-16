@@ -1,6 +1,7 @@
 package com.drft.mobile.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.drft.mobile.BuildConfig
@@ -52,6 +53,29 @@ data class TimelineState(
         get() = pagination?.nextOffset
 }
 
+enum class UploadStatus {
+    Queued,
+    Uploading,
+    Completed,
+    Failed
+}
+
+enum class UploadMode {
+    Direct,
+    Chunked
+}
+
+data class UploadQueueItem(
+    val id: String,
+    val displayName: String,
+    val uri: Uri,
+    val status: UploadStatus = UploadStatus.Queued,
+    val progress: Int = 0,
+    val phase: String = "Queued",
+    val mode: UploadMode? = null,
+    val error: String? = null
+)
+
 data class AppUiState(
     val session: LocalSession = LocalSession(serverUrl = BuildConfig.DEFAULT_API_BASE_URL),
     val activeSection: DrftSection = DrftSection.All,
@@ -61,7 +85,8 @@ data class AppUiState(
     val timelineState: TimelineState = TimelineState(),
     val libraryLoading: Boolean = false,
     val libraryError: String? = null,
-    val loadingMore: Boolean = false
+    val loadingMore: Boolean = false,
+    val uploadQueue: List<UploadQueueItem> = emptyList()
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,6 +100,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val libraryLoading = MutableStateFlow(false)
     private val loadingMore = MutableStateFlow(false)
     private val libraryError = MutableStateFlow<String?>(null)
+    private val uploadQueue = MutableStateFlow<List<UploadQueueItem>>(emptyList())
+    private val uploadWorkerRunning = MutableStateFlow(false)
 
     private val shellIdentity = combine(
         preferencesRepository.session,
@@ -103,8 +130,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         shellState,
         libraryLoading,
         loadingMore,
-        libraryError
-    ) { shell, isLoading, isLoadingMore, error ->
+        libraryError,
+        uploadQueue
+    ) { shell, isLoading, isLoadingMore, error, queue ->
         AppUiState(
             session = if (shell.session.serverUrl.isBlank()) {
                 shell.session.copy(serverUrl = BuildConfig.DEFAULT_API_BASE_URL)
@@ -118,7 +146,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             timelineState = shell.timeline,
             libraryLoading = isLoading,
             libraryError = error,
-            loadingMore = isLoadingMore
+            loadingMore = isLoadingMore,
+            uploadQueue = queue
         )
     }.stateIn(
         scope = viewModelScope,
@@ -132,7 +161,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             timelineState = TimelineState(),
             libraryLoading = false,
             libraryError = null,
-            loadingMore = false
+            loadingMore = false,
+            uploadQueue = emptyList()
         )
     )
 
@@ -222,6 +252,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun enqueueUploads(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val newItems = uris.map { uri ->
+            UploadQueueItem(
+                id = "${System.currentTimeMillis()}-${uri.hashCode()}",
+                displayName = uri.lastPathSegment?.substringAfterLast('/') ?: "DRFT upload",
+                uri = uri
+            )
+        }
+        uploadQueue.value = uploadQueue.value + newItems
+        processUploadQueue()
+    }
+
+    fun retryUpload(id: String) {
+        uploadQueue.value = uploadQueue.value.map { item ->
+            if (item.id == id) {
+                item.copy(status = UploadStatus.Queued, progress = 0, phase = "Queued", mode = null, error = null)
+            } else {
+                item
+            }
+        }
+        processUploadQueue()
+    }
+
+    fun clearFinishedUploads() {
+        uploadQueue.value = uploadQueue.value.filterNot { it.status == UploadStatus.Completed }
+    }
+
     fun loadMoreLibrary() {
         val session = uiState.value.session
         val nextOffset = timelineState.value.nextOffset ?: return
@@ -275,6 +333,97 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             libraryError.value = it.message
         }
         libraryLoading.value = false
+    }
+
+    private fun processUploadQueue() {
+        if (uploadWorkerRunning.value) return
+        val session = uiState.value.session
+        if (!session.hasServer || !session.hasAuthToken) return
+
+        viewModelScope.launch {
+            uploadWorkerRunning.value = true
+            try {
+                while (true) {
+                    val nextItem = uploadQueue.value.firstOrNull { it.status == UploadStatus.Queued } ?: break
+                    markUploadStatus(
+                        id = nextItem.id,
+                        status = UploadStatus.Uploading,
+                        progress = 0,
+                        phase = "Queued",
+                        mode = null,
+                        error = null
+                    )
+                    runCatching {
+                        repository.uploadFile(
+                            context = getApplication(),
+                            baseUrl = session.serverUrl,
+                            token = session.authToken,
+                            uri = nextItem.uri
+                        ) { progress, phase ->
+                            val mode = if (phase.contains("chunk", ignoreCase = true) || phase.contains("session", ignoreCase = true)) {
+                                UploadMode.Chunked
+                            } else {
+                                UploadMode.Direct
+                            }
+                            markUploadStatus(
+                                id = nextItem.id,
+                                status = UploadStatus.Uploading,
+                                progress = progress,
+                                phase = phase,
+                                mode = mode,
+                                error = null
+                            )
+                        }
+                    }.onSuccess {
+                        val currentItem = uploadQueue.value.firstOrNull { it.id == nextItem.id }
+                        markUploadStatus(
+                            id = nextItem.id,
+                            status = UploadStatus.Completed,
+                            progress = 100,
+                            phase = "Uploaded",
+                            mode = currentItem?.mode,
+                            error = null
+                        )
+                        loadLibrarySnapshot(session.serverUrl, session.authToken)
+                    }.onFailure {
+                        val currentItem = uploadQueue.value.firstOrNull { it.id == nextItem.id }
+                        markUploadStatus(
+                            id = nextItem.id,
+                            status = UploadStatus.Failed,
+                            progress = currentItem?.progress ?: nextItem.progress,
+                            phase = "Upload failed",
+                            mode = currentItem?.mode,
+                            error = it.message
+                        )
+                    }
+                }
+            } finally {
+                uploadWorkerRunning.value = false
+            }
+        }
+    }
+
+    private fun markUploadStatus(
+        id: String,
+        status: UploadStatus,
+        progress: Int,
+        phase: String,
+        mode: UploadMode?,
+        error: String?
+    ) {
+        uploadQueue.value = uploadQueue.value.map { item ->
+            if (item.id == id) {
+                item.copy(
+                    status = status,
+                    progress = progress,
+                    phase = phase,
+                    mode = mode ?: item.mode,
+                    error = error
+                )
+            } else {
+                item
+            }
+        }
     }
 }
 

@@ -1,5 +1,7 @@
 package com.drft.mobile.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -8,8 +10,10 @@ import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartDisplay
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -32,12 +36,31 @@ fun DrftApp(
     appViewModel: AppViewModel = viewModel()
 ) {
     val uiState by appViewModel.uiState.collectAsStateWithLifecycle()
+    val uploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        appViewModel.enqueueUploads(uris)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(topBarTitle(uiState.destination, uiState.activeSection))
+                },
+                actions = {
+                    if (uiState.destination is RootDestination.Library && uiState.activeSection != DrftSection.Settings) {
+                        IconButton(
+                            onClick = {
+                                uploadLauncher.launch(arrayOf("image/*", "video/*"))
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Upload,
+                                contentDescription = "Upload media"
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors()
             )
@@ -92,8 +115,11 @@ fun DrftApp(
                         libraryLoading = uiState.libraryLoading,
                         libraryError = uiState.libraryError,
                         loadingMore = uiState.loadingMore,
+                        uploadQueue = uiState.uploadQueue,
                         onRefresh = appViewModel::refreshLibrary,
                         onLoadMore = appViewModel::loadMoreLibrary,
+                        onRetryUpload = appViewModel::retryUpload,
+                        onClearFinishedUploads = appViewModel::clearFinishedUploads,
                         onChangeServer = appViewModel::openServerSetup,
                         onSignOut = appViewModel::signOut
                     )

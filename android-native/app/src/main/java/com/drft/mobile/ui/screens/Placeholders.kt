@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -25,6 +26,10 @@ import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -64,6 +69,9 @@ import com.drft.mobile.ui.AppViewModel
 import com.drft.mobile.ui.DrftSection
 import com.drft.mobile.ui.LibrarySummary
 import com.drft.mobile.ui.TimelineState
+import com.drft.mobile.ui.UploadMode
+import com.drft.mobile.ui.UploadQueueItem
+import com.drft.mobile.ui.UploadStatus
 import com.drft.mobile.data.network.UserResponse
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
@@ -228,8 +236,11 @@ fun LibraryPlaceholder(
     libraryLoading: Boolean,
     libraryError: String?,
     loadingMore: Boolean,
+    uploadQueue: List<UploadQueueItem>,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
+    onRetryUpload: (String) -> Unit,
+    onClearFinishedUploads: () -> Unit,
     onChangeServer: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -434,6 +445,16 @@ fun LibraryPlaceholder(
             }
         }
 
+        if (uploadQueue.isNotEmpty()) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                UploadQueueCard(
+                    items = uploadQueue,
+                    onRetryUpload = onRetryUpload,
+                    onClearFinishedUploads = onClearFinishedUploads
+                )
+            }
+        }
+
         if (visibleItems.isEmpty() && !libraryLoading) {
             item(span = StaggeredGridItemSpan.FullLine) {
                 Card(
@@ -609,6 +630,167 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+private fun UploadQueueCard(
+    items: List<UploadQueueItem>,
+    onRetryUpload: (String) -> Unit,
+    onClearFinishedUploads: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudUpload,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column {
+                        Text(
+                            text = "Upload queue",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${items.count { it.status == UploadStatus.Uploading }} uploading • ${items.count { it.status == UploadStatus.Failed }} failed",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (items.any { it.status == UploadStatus.Completed }) {
+                    OutlinedButton(onClick = onClearFinishedUploads) {
+                        Text("Clear done")
+                    }
+                }
+            }
+
+            items.forEach { item ->
+                UploadRow(item = item, onRetryUpload = onRetryUpload)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UploadRow(
+    item: UploadQueueItem,
+    onRetryUpload: (String) -> Unit
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            when (item.status) {
+                UploadStatus.Queued -> {
+                    Icon(
+                        imageVector = Icons.Filled.CloudUpload,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                UploadStatus.Uploading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+                UploadStatus.Completed -> {
+                    Icon(
+                        imageVector = Icons.Filled.Done,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                UploadStatus.Failed -> {
+                    Icon(
+                        imageVector = Icons.Filled.ErrorOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = item.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = itemStatusText(item),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (item.status == UploadStatus.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            if (item.status == UploadStatus.Failed) {
+                IconButton(onClick = { onRetryUpload(item.id) }) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Retry upload"
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun itemStatusText(item: UploadQueueItem): String {
+    val modeLabel = when (item.mode) {
+        UploadMode.Chunked -> "Chunked"
+        UploadMode.Direct -> "Direct"
+        null -> null
+    }
+
+    return when (item.status) {
+        UploadStatus.Queued -> "Queued"
+        UploadStatus.Uploading -> buildString {
+            if (modeLabel != null) {
+                append(modeLabel)
+                append(" • ")
+            }
+            append(item.phase)
+            append(" • ")
+            append("${item.progress}%")
+        }
+        UploadStatus.Completed -> buildString {
+            if (modeLabel != null) {
+                append(modeLabel)
+                append(" • ")
+            }
+            append("Uploaded")
+        }
+        UploadStatus.Failed -> item.error ?: "Upload failed"
     }
 }
 
