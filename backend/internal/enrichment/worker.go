@@ -25,19 +25,6 @@ type Processor interface {
 	Process(context.Context, Job) error
 }
 
-type NoopProcessor struct {
-	logger *slog.Logger
-}
-
-func NewNoopProcessor(logger *slog.Logger) *NoopProcessor {
-	return &NoopProcessor{logger: logger}
-}
-
-func (p *NoopProcessor) Process(ctx context.Context, job Job) error {
-	p.logger.Info("enrichment placeholder processor completed", "job_id", job.ID, "file_id", job.FileID, "job_type", job.JobType)
-	return nil
-}
-
 type Worker struct {
 	cfg       config.Config
 	logger    *slog.Logger
@@ -46,14 +33,15 @@ type Worker struct {
 }
 
 func NewWorker(cfg config.Config, logger *slog.Logger, db *sql.DB, processor Processor) *Worker {
+	store := NewStore(db)
 	if processor == nil {
-		processor = NewNoopProcessor(logger)
+		processor = NewPipelineProcessor(store, cfg.StorageRoot)
 	}
 
 	return &Worker{
 		cfg:       cfg,
 		logger:    logger,
-		store:     NewStore(db),
+		store:     store,
 		processor: processor,
 	}
 }

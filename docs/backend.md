@@ -128,6 +128,17 @@ Current worker flow:
 
 The current processor is a placeholder so the queue lifecycle can be exercised safely before real face and place analyzers are added.
 
+### Place enrichment first pass
+
+The current `v0.3.0` place pass now does this for image jobs:
+
+1. load the stored image from DRFT storage
+2. read EXIF GPS coordinates when present
+3. persist raw per-file coordinates
+4. create or update one stable place suggestion for that file
+
+This is intentionally a first pass. It proves EXIF GPS extraction and place suggestion persistence before broader place normalization and grouping rules are added.
+
 ### Storage stats
 
 Current stats API returns:

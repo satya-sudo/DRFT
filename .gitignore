@@ -15,6 +15,13 @@ mobile/node_modules/
 mobile/.expo/
 mobile/android/
 mobile/keys/
+android-native/.gradle/
+android-native/.kotlin/
+android-native/.idea/
+android-native/build/
+android-native/app/build/
+android-native/local.properties
+*.iml
 bin/
 storage/
 data/

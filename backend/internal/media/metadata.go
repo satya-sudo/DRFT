@@ -18,6 +18,8 @@ type extractedMetadata struct {
 	WidthPX    *int
 	HeightPX   *int
 	DurationMS *int64
+	Latitude   *float64
+	Longitude  *float64
 }
 
 func extractMetadata(path, mediaType string) (extractedMetadata, error) {
@@ -61,6 +63,11 @@ func extractImageMetadata(path string) (extractedMetadata, error) {
 		return metadata, nil
 	}
 
+	if latitude, longitude, err := x.LatLong(); err == nil {
+		metadata.Latitude = &latitude
+		metadata.Longitude = &longitude
+	}
+
 	if takenAt, err := x.DateTime(); err == nil {
 		utc := takenAt.UTC()
 		metadata.TakenAt = &utc
@@ -88,4 +95,3 @@ func extractImageMetadata(path string) (extractedMetadata, error) {
 
 	return metadata, nil
 }
-

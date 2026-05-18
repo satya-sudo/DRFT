@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -28,8 +29,33 @@ type UserStatus struct {
 	Failed         int `json:"failed"`
 }
 
+type FileRecord struct {
+	ID         string
+	UserID     string
+	StorageKey string
+	MediaType  string
+}
+
 func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
+}
+
+func (s *Store) GetFileForJob(ctx context.Context, fileID string) (FileRecord, error) {
+	var file FileRecord
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, user_id, storage_key, media_type
+		FROM files
+		WHERE id = $1 AND deleted_at IS NULL
+	`, fileID).Scan(&file.ID, &file.UserID, &file.StorageKey, &file.MediaType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return FileRecord{}, fmt.Errorf("get job file: file not found")
+	}
+	if err != nil {
+		return FileRecord{}, fmt.Errorf("get job file: %w", err)
+	}
+
+	return file, nil
 }
 
 func (s *Store) ClaimNextJob(ctx context.Context) (Job, error) {
@@ -308,4 +334,99 @@ func (s *Store) MarkJobFailed(ctx context.Context, jobID, failure string) error 
 	}
 
 	return nil
+}
+
+func (s *Store) UpsertPlaceSuggestion(ctx context.Context, userID, fileID string, latitude, longitude float64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin upsert place suggestion: %w", err)
+	}
+	defer tx.Rollback()
+
+	displayName := formatCoordinatePlace(latitude, longitude)
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO file_locations (file_id, user_id, latitude, longitude, source, updated_at)
+		VALUES ($1, $2, $3, $4, 'exif_gps', NOW())
+		ON CONFLICT (file_id) DO UPDATE
+		SET user_id = EXCLUDED.user_id,
+		    latitude = EXCLUDED.latitude,
+		    longitude = EXCLUDED.longitude,
+		    source = EXCLUDED.source,
+		    updated_at = NOW()
+	`, fileID, userID, latitude, longitude); err != nil {
+		return fmt.Errorf("upsert file location: %w", err)
+	}
+
+	var existingPlaceID string
+	err = tx.QueryRowContext(ctx, `
+		SELECT fps.place_id
+		FROM file_place_suggestions fps
+		INNER JOIN places p ON p.id = fps.place_id
+		WHERE fps.file_id = $1
+		  AND p.user_id = $2
+		ORDER BY fps.created_at DESC
+		LIMIT 1
+	`, fileID, userID).Scan(&existingPlaceID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		existingPlaceID = ""
+	case err != nil:
+		return fmt.Errorf("find existing place suggestion: %w", err)
+	}
+
+	if existingPlaceID != "" {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE places
+			SET display_name = $2,
+			    latitude = $3,
+			    longitude = $4,
+			    source = 'exif_gps',
+			    status = CASE WHEN status = 'rejected' THEN status ELSE 'suggested' END,
+			    updated_at = NOW()
+			WHERE id = $1
+		`, existingPlaceID, displayName, latitude, longitude); err != nil {
+			return fmt.Errorf("update place suggestion: %w", err)
+		}
+	} else {
+		if err := tx.QueryRowContext(ctx, `
+			INSERT INTO places (user_id, display_name, latitude, longitude, source, status)
+			VALUES ($1, $2, $3, $4, 'exif_gps', 'suggested')
+			RETURNING id
+		`, userID, displayName, latitude, longitude).Scan(&existingPlaceID); err != nil {
+			return fmt.Errorf("insert place suggestion: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO file_place_suggestions (file_id, place_id, confidence, status)
+		VALUES ($1, $2, 1.0, 'suggested')
+		ON CONFLICT (file_id, place_id) DO UPDATE
+		SET confidence = EXCLUDED.confidence,
+		    status = CASE
+		        WHEN file_place_suggestions.status = 'confirmed' THEN file_place_suggestions.status
+		        ELSE EXCLUDED.status
+		    END
+	`, fileID, existingPlaceID); err != nil {
+		return fmt.Errorf("upsert file place suggestion: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM file_place_suggestions
+		WHERE file_id = $1
+		  AND place_id <> $2
+		  AND status <> 'confirmed'
+	`, fileID, existingPlaceID); err != nil {
+		return fmt.Errorf("cleanup stale file place suggestions: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit upsert place suggestion: %w", err)
+	}
+
+	return nil
+}
+
+func formatCoordinatePlace(latitude, longitude float64) string {
+	return strings.TrimSpace(fmt.Sprintf("GPS %.5f, %.5f", latitude, longitude))
 }
